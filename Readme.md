@@ -1,0 +1,172 @@
+# 🚁 Skynetra
+
+**Skynetra** is a modular, real-time **face detection, tracking, and identification pipeline** designed for **video streams and aerial / edge scenarios**.
+
+It combines modern deep-learning components with **stateful, event-driven system design**, ensuring high stability, low latency, and extensibility for future research and deployment.
+
+---
+
+## ✨ Key Features
+
+* **Face Detection** using YOLOv8-Face
+* **Multi-Object Tracking** using ByteTrack
+* **Face Embedding** via FaceNet (VGGFace2)
+* **Temporal Identity Stabilization** using embedding pooling
+* **Event-based Identification** (not per-frame, avoids flicker)
+* **Frame-sampling aware architecture** (detector ≠ tracker cadence)
+* **Fully modular design** (swap models without touching pipeline logic)
+
+Skynetra is built as a **system**, not a demo.
+
+---
+
+## 🧠 Core Design Philosophy
+
+Skynetra follows three fundamental principles:
+
+### 1. Detection creates state
+
+YOLO detects faces only when needed.
+
+### 2. Tracking propagates state
+
+ByteTrack runs every frame to maintain continuity.
+
+### 3. Identity is decided sparsely
+
+Face identification happens **only after sufficient evidence**, not every frame.
+
+This separation avoids:
+
+* Identity flickering
+* Excessive GPU load
+* Latency spikes
+* Fragile pipelines
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+Video Frame
+   ↓
+YOLOv8-Face (sparse, sampled)
+   ↓
+ByteTrack (every frame)
+   ↓
+Face Cropping (stable tracks only)
+   ↓
+FaceNet Embeddings
+   ↓
+Identity Memory (per track)
+   ↓
+Embedding Pooling
+   ↓
+Identity Matching
+```
+
+Each stage is **decoupled** and **replaceable**.
+
+---
+
+## 📁 Repository Structure
+
+```
+skynetra/
+│
+├── config/          # Tracker & runtime configs
+├── models/          # Detector, tracker, embedder wrappers
+├── identity/        # Memory, pooling, identification logic
+├── utils/           # Frame sampler, vision utilities
+├── pipelines/       # Runtime video pipeline
+│
+├── main.py          # Entry point
+├── requirements.txt
+└── README.md
+```
+
+This structure allows:
+
+* Easy experimentation
+* Component-level optimization
+* Clean scaling to real-time systems
+
+---
+
+## 🚀 Getting Started
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Run the pipeline
+
+```bash
+python main.py
+```
+
+Update the video path and model weights inside `main.py` as needed.
+
+---
+
+## 🧩 Swappable Components
+
+Skynetra is intentionally modular.
+
+You can easily:
+
+* Replace YOLOv8-Face with another detector
+* Swap ByteTrack with a different tracker
+* Replace mean pooling with Hopfield pooling
+* Add new identity matching strategies
+* Move detection or embedding to async threads
+
+No changes to the core pipeline are required.
+
+---
+
+## 🧪 Current Capabilities
+
+* Stable ID assignment across frames
+* Robust to skipped detections
+* Identity confidence increases over time
+* Handles high-resolution (4K) video
+* Works in offline and near-real-time modes
+
+---
+
+## 🔮 Planned Extensions
+
+* Hopfield pooling for identity refinement
+* Identity confidence decay & re-identification
+* Async / multi-threaded execution
+* Persistent identity databases
+* Edge deployment (Jetson / drone hardware)
+* Performance profiling & benchmarks
+
+---
+
+## ⚠️ Important Notes
+
+* Identification is **event-based**, not frame-based
+* Tracker initialization includes a warm-up phase
+* Designed for **systems research**, not plug-and-play apps
+
+---
+
+## 🧠 Why “Skynetra”?
+
+> **Sky** — aerial & vision systems
+> **Netra** — Sanskrit for *eye / vision*
+
+Skynetra literally means:
+**“An eye in the sky, with memory.”**
+
+---
+
+## 📜 License
+
+MIT License 
+

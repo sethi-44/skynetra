@@ -1,0 +1,6 @@
+torch
+torchvision
+ultralytics
+numpy
+opencv-python
+Pillow==11.3.0
