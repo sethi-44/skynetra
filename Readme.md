@@ -74,11 +74,10 @@ Each stage is **decoupled** and **replaceable**.
 ```
 skynetra/
 │
-├── config/          # Tracker & runtime configs
 ├── models/          # Detector, tracker, embedder wrappers
-├── identity/        # Memory, pooling, identification logic
+├── detectors/        # Detector logic
 ├── utils/           # Frame sampler, vision utilities
-├── pipelines/       # Runtime video pipeline
+├── trackers/       # ByteTrack 
 │
 ├── main.py          # Entry point
 ├── requirements.txt
