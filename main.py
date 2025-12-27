@@ -6,15 +6,10 @@ from models.inception_resnet_v1 import InceptionResnetV1
 from detectors.yolo_face_detector import FaceDetector
 from trackers.byte_tracker_wrapper import create_tracker
 from utils.sampling import FrameSampler
-from utils.face_utils import crop_face
+from utils.face_utils import crop_face, empty_boxes
 from utils.embedding_ops import normalize_embeddings, mean_pool_embeddings, identify
 from utils.visualize import draw_tracks
-from ultralytics.engine.results import Boxes
-def empty_boxes(device):
-    return Boxes(
-        torch.empty((0, 6), device=device),
-        orig_shape=(1, 1)
-    )
+
 
 
 def run():
@@ -24,7 +19,7 @@ def run():
     # --- Load Models ---
     face_detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
     tracker = create_tracker()
-    sampler = FrameSampler(detect_every=3)
+    sampler = FrameSampler()
 
     resnet = InceptionResnetV1(
         pretrained=None,
@@ -57,7 +52,7 @@ def run():
     print("🚀 Skynetra pipeline running... press ESC to quit")
     cv2.namedWindow("Skynetra Tracking", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Skynetra Tracking", cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
-
+    tracks = []
 
 
 
@@ -67,21 +62,12 @@ def run():
             print("⚠️ End of video or cannot open file.")
             break
 
-        run_detector = sampler.should_run_detector()
         # Detection
-        if run_detector or len(tracker.tracked_stracks) == 0:
+        if sampler.should_run_detector(tracks):
             boxes = face_detector.detect(frame)
+            sampler.record_detection(tracks)
         else:
             boxes = empty_boxes(device)
-
-        # ========= ADD THIS BLOCK HERE =========
-        # if len(boxes):
-        #     b = boxes.data
-        #     if b.shape[1] == 5:
-        #         cls = torch.zeros((b.shape[0], 1), device=b.device)
-        #         b = torch.cat([b, cls], dim=1)
-        #         boxes.data = b
-        # ======================================
 
         # Tracker
         if boxes.data.is_cuda:

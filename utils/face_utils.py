@@ -1,6 +1,6 @@
 import cv2
 import torch
-
+from ultralytics.engine.results import Boxes
 def crop_face(frame, box, size=160):
     x1, y1, x2, y2 = map(int, box)
     h, w, _ = frame.shape
@@ -15,3 +15,9 @@ def crop_face(frame, box, size=160):
     face = cv2.resize(face, (size, size))
     face = torch.from_numpy(face).permute(2, 0, 1).float() / 255.0
     return face
+
+def empty_boxes(device):
+    return Boxes(
+        torch.empty((0, 6), device=device),
+        orig_shape=(1, 1)
+    )
