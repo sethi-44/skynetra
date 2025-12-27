@@ -1,7 +1,7 @@
 import cv2
 import torch
 import torch.nn as nn
-
+from concurrent.futures import ThreadPoolExecutor
 from models.inception_resnet_v1 import InceptionResnetV1
 from detectors.yolo_face_detector import FaceDetector
 from trackers.byte_tracker_wrapper import create_tracker
@@ -12,12 +12,16 @@ from utils.visualize import draw_tracks
 
 
 
+
 def run():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # --- Load Models ---
-    face_detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
+    from detectors.async_gpu_detector import AsyncGPUDetector
+    base_detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
+    face_detector = AsyncGPUDetector(base_detector, device)
+
     tracker = create_tracker()
     sampler = FrameSampler()
 
@@ -53,7 +57,10 @@ def run():
     cv2.namedWindow("Skynetra Tracking", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Skynetra Tracking", cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
     tracks = []
-
+    # Configure asynchronous detection only on CPU to avoid CUDA context issues
+    executor = ThreadPoolExecutor(max_workers=1) 
+    pending = None
+    latest_boxes = None
 
 
     while True:
@@ -61,15 +68,23 @@ def run():
         if not ret:
             print("⚠️ End of video or cannot open file.")
             break
+        # 1) COLLECT if ready
+        if pending and pending.done():
+            try:
+                latest_boxes = pending.result()   # <-- USE returned value
+            except Exception as e:
+                print("⚠️ async detector error:", e)
+                latest_boxes = None
+            pending = None
 
-        # Detection
-        if sampler.should_run_detector(tracks):
-            boxes = face_detector.detect(frame)
-            sampler.record_detection(tracks)
-        else:
-            boxes = empty_boxes(device)
+        # 2) DECIDE if we schedule new inference
+        if sampler.should_run_detector(tracks) or len(tracker.tracked_stracks)==0:
+            if pending is None:
+                pending = executor.submit(face_detector.infer, frame.copy())
 
-        # Tracker
+        # 3) CHOOSE BOXES FOR TRACKING
+        boxes = latest_boxes if latest_boxes is not None else empty_boxes(device)
+
         if boxes.data.is_cuda:
             boxes.data = boxes.data.cpu()
 
