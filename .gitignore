@@ -6,3 +6,4 @@ skynetra-env/
 *.pth
 runs/
 data/
+test.py

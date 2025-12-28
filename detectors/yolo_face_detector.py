@@ -12,7 +12,7 @@ class FaceDetector:
         self._model = YOLO(model_path).to(device)
 
     def detect(self, frame):
-        print("[SYNC DETECTOR] running")
+        # print("[SYNC DETECTOR] running")
 
         result = self.model(frame, conf=self.conf, verbose=False)[0]
         return result.boxes
