@@ -93,6 +93,10 @@ def run():
         run_det, reason = sampler.should_run_detector(tracks)
         if run_det and pending is None:
             pending = executor.submit(face_detector.infer, frame.copy())
+            sampler.prev_active_ids = {t[4] for t in tracks if t[6] == 0} 
+            print(f"🔍 Detector triggered: {reason}")
+        else:
+            print(f"⏭️ Detector skipped: {reason}")    
 
         # --- Tracker update ---
         boxes = latest_boxes if latest_boxes is not None else empty_boxes(device)
