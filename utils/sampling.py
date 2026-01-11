@@ -62,21 +62,33 @@ class FrameSampler:
         frames_since_detect = self.frame_idx - self.last_detect_frame
         active_ids = {t[4] for t in tracks if t[6] == 0}
 
-        if len(tracks) == 0:
+        if len(tracks) == 0 and frames_since_detect >= self.max_gap//2:
             return True, "no_tracks"
 
-        if active_ids != self.prev_active_ids:
+        
+        # ------ cooldown ------
+        if frames_since_detect < self.min_gap:
+            return False, f"cooldown({frames_since_detect})"
+
+        if (
+            frames_since_detect >= self.min_gap
+            and len(active_ids) >= 1
+            and active_ids != self.prev_active_ids
+        ):
             return True, "id_topology_change"
+
 
         live_confs = [t[5] for t in tracks if t[6]==0]
         if live_confs:
             avg_conf = np.mean(live_confs)
-            if avg_conf < self.conf_thresh:
+            if avg_conf < self.conf_thresh and frames_since_detect >= self.min_gap:
                 return True, f"low_tracker_conf({avg_conf:.2f})"
+
         else:
             return True, "no_live_tracks"
 
 
+        # --- motion (normalized, center-based) ---
         # ---------- PER-TRACK CHECKS ----------
         for t in tracks:
             if t[6] != 0:
@@ -85,51 +97,64 @@ class FrameSampler:
             tid = t[4]
             x1, y1, x2, y2 = map(int, t[0:4])
 
-            # --- motion ---
             prev = self.prev_pos.get(tid)
-            if prev:
-                px1, py1, px2, py2 = prev
-                motion = abs(x1-px1) + abs(y1-py1)
-                if motion > self.motion_thresh:
-                    return True, f"motion({tid}:{motion:.1f})"
+            if not prev:
+                continue
 
-            # --- identity confidence drift ---
-            prev_conf = self.prev_id_conf.get(tid)
-            if prev_conf is not None:
-                decayed_conf = prev_conf * (self.id_conf_decay ** frames_since_detect)
-                if decayed_conf < self.id_conf_thresh:
-                    return True, f"id_conf({tid}:{decayed_conf:.2f})"
+            px1, py1, px2, py2 = prev
+
+            # centers
+            cx  = (x1 + x2) * 0.5
+            cy  = (y1 + y2) * 0.5
+            pcx = (px1 + px2) * 0.5
+            pcy = (py1 + py2) * 0.5
+
+            # displacement
+            disp = ((cx - pcx)**2 + (cy - pcy)**2) ** 0.5
+
+            # normalize by face size
+            face_size = max(x2 - x1, y2 - y1, 1)
+            motion_norm = disp / face_size
+
+            # trigger only for REAL jumps
+            if motion_norm > 0.7 and frames_since_detect >= self.min_gap:
+                return True, f"motion({tid}:{motion_norm:.2f})"
+
+            # # --- identity confidence drift ---
+            # prev_conf = self.prev_id_conf.get(tid)
+            # if prev_conf is not None:
+            #     decayed_conf = prev_conf * (self.id_conf_decay ** frames_since_detect)
+            #     if decayed_conf < self.id_conf_thresh:
+            #         return True, f"id_conf({tid}:{decayed_conf:.2f})"
 
 
-            # --- hopfield absolute energy ---
-            E = self.prev_energy.get(tid)
-            if E and E > self.energy_thresh:
-                return True, f"energy_high({tid}:{E:.3f})"
+            # # --- hopfield absolute energy ---
+            # E = self.prev_energy.get(tid)
+            # if E and E > self.energy_thresh:
+            #     return True, f"energy_high({tid}:{E:.3f})"
 
-            # --- hopfield dE ---
-            dE = self.prev_energy_trend.get(tid)
-            if dE and dE > self.energy_delta_thresh:
-                return True, f"energy_rising({tid}:{dE:.3f})"
+            # # --- hopfield dE ---
+            # dE = self.prev_energy_trend.get(tid)
+            # if dE and dE > self.energy_delta_thresh:
+            #     return True, f"energy_rising({tid}:{dE:.3f})"
 
 
-            # --- cosine absolute ---
-            cos_sim = self.prev_cos.get(tid)
-            if cos_sim and cos_sim < self.cos_thresh:
-                return True, f"low_cos_sim({tid}:{cos_sim:.2f})"
+            # # --- cosine absolute ---
+            # cos_sim = self.prev_cos.get(tid)
+            # if cos_sim and cos_sim < self.cos_thresh:
+            #     return True, f"low_cos_sim({tid}:{cos_sim:.2f})"
 
-            # --- cosine drift ---
-            cos_drop = self.prev_cos_delta.get(tid)
-            if cos_drop and cos_drop > self.cos_delta_thresh:
-                return True, f"cos_drift({tid}:{cos_drop:.2f})"
+            # # --- cosine drift ---
+            # cos_drop = self.prev_cos_delta.get(tid)
+            # if cos_drop and cos_drop > self.cos_delta_thresh:
+            #     return True, f"cos_drift({tid}:{cos_drop:.2f})"
 
 
         # ------ forced refresh ------
         if frames_since_detect >= self.max_gap:
             return True, f"max_gap({frames_since_detect})"
 
-        # ------ cooldown ------
-        if frames_since_detect < self.min_gap:
-            return False, f"cooldown({frames_since_detect})"
+        
 
         return False, "stable"
 

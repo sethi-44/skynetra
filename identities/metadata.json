@@ -1,0 +1,24 @@
+{
+    "version": "2.3",
+    "timestamp": "2026-01-08T17:26:58.672933",
+    "identities": [
+        {
+            "name": "Harshit Sethi",
+            "emb_rows": [
+                0
+            ],
+            "description": "Fucks Hard",
+            "alive": true,
+            "image": null
+        },
+        {
+            "name": "Varuna Sethi",
+            "emb_rows": [
+                1
+            ],
+            "description": "Chutiya Hai",
+            "alive": true,
+            "image": null
+        }
+    ]
+}

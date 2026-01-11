@@ -6,7 +6,7 @@ class FaceDetector:
     def model(self):
         return self._model
 
-    def __init__(self, model_path, device="cuda", conf=0.05):
+    def __init__(self, model_path, device="cuda", conf=0.15):
         self.device = device
         self.conf = conf
         self._model = YOLO(model_path).to(device)

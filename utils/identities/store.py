@@ -291,6 +291,14 @@ class IdentityStore:
             "total_embeddings": self.embeddings.shape[0],
             "avg_emb_per_id": self.embeddings.shape[0] / max(1,len(self.store)),
         }
+    @classmethod
+    def from_path(cls, path, device="cpu"):
+        store = cls(device=device)
+        if os.path.exists(path):
+            store.load(path, map_location=device)
+            store.finalize()
+        return store
+
     
 
     

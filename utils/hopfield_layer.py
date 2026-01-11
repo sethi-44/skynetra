@@ -5,12 +5,31 @@ import torch.nn.functional as F
 class HopfieldLayer:
     def __init__(self, stored_patterns, beta=1.0, device="cpu"):
         """
-        stored_patterns: [N, D] tensor
+        stored_patterns: [N, D] tensor or list of [D] tensors
         device: "cpu" or "cuda"
         """
         # normalize & move to device
         self.device = device
-        self.stored = F.normalize(stored_patterns, dim=1).to(device)
+
+        # Accept lists/tuples of tensors, a single tensor, or array-like inputs
+        if isinstance(stored_patterns, (list, tuple)):
+            if len(stored_patterns) == 0:
+                raise ValueError("stored_patterns must contain at least one pattern")
+            # stack tensors or convert array-likes
+            if isinstance(stored_patterns[0], torch.Tensor):
+                stored = torch.stack(stored_patterns)
+            else:
+                stored = torch.tensor(stored_patterns)
+        elif isinstance(stored_patterns, torch.Tensor):
+            stored = stored_patterns
+        else:
+            stored = torch.tensor(stored_patterns)
+
+        if stored.dim() == 1:
+            stored = stored.unsqueeze(0)
+
+        stored = stored.float().to(device)
+        self.stored = F.normalize(stored, dim=1)
         self.beta = beta
 
     @torch.no_grad()
@@ -35,7 +54,7 @@ class HopfieldLayer:
         return (-torch.logsumexp(scores, dim=0)).item()
 
     @torch.no_grad()
-    def refine(self, query, max_steps=5, alpha=0.5, tol=1e-4):
+    def refine(self, query, max_steps=5, alpha=0.7, tol=1e-4):
         q = F.normalize(query, dim=-1).to(self.device)
 
         for _ in range(max_steps):
