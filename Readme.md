@@ -6,6 +6,14 @@ It combines modern deep-learning components with **stateful, event-driven system
 
 ---
 
+## Live Demo(8-second clip)
+
+**Left**: Raw input video
+**Right**: Processed Output video
+
+![skynetra_demo](https://github.com/user-attachments/assets/58ce3822-ab77-498d-81e7-2b18abda928a)
+
+
 ## ✨ Key Features
 
 * **Face Detection** using YOLOv8-Face
