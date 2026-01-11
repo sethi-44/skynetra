@@ -15,6 +15,22 @@ It combines modern deep-learning components with **stateful, event-driven system
 
 ---
 
+## Performance Benchmarks
+
+Tested on a Full HD (1080p) 60 FPS video clip .  
+Pipeline includes sparse YOLOv8-Face detection, dense ByteTrack tracking, FaceNet embeddings, Hopfield temporal pooling, and visualization.
+
+| Hardware                  | Resolution | Average FPS | Avg Latency (ms/frame) | Min/Max Latency (ms) |
+|---------------------------|------------|-------------|-------------------------|-----------------------|
+| RTX 2050 Laptop GPU       | 1080p      | 19.2        | 22.7                    | 2.0 / 81.4            | 
+| Intel Core i5-12450H CPU  | 1080p      | 12.4        | 43.3                    | 2.4 / 243.7           |
+
+- FPS calculated as total frames / total processing time (excluding video I/O overhead).
+- Latency = per-frame pipeline time (detection + tracking + ID decision + drawing).
+- Future tests planned: Jetson Orin/edge devices, 4K input, optimizations (TensorRT, ONNX).
+
+---
+
 ## ✨ Key Features
 
 * **Face Detection** using YOLOv8-Face
