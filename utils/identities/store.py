@@ -29,7 +29,7 @@ class Info:
 class IdentityStore:
     VERSION = "2.3"
 
-    def __init__(self, embedding_dim=512, device="cpu"):
+    def __init__(self, embedding_dim=128, device="cpu"):
         self.device = device
         self.embedding_dim = embedding_dim
 
@@ -295,8 +295,14 @@ class IdentityStore:
     def from_path(cls, path, device="cpu"):
         store = cls(device=device)
         if os.path.exists(path):
-            store.load(path, map_location=device)
-            store.finalize()
+            emb_path = os.path.join(path, "embeddings.pt")
+            meta_path = os.path.join(path, "metadata.json")
+            # Only load if both files exist
+            if os.path.exists(emb_path) and os.path.exists(meta_path):
+                store.load(path, map_location=device)
+                store.finalize()
+        else:
+            os.makedirs(path, exist_ok=True)
         return store
 
     

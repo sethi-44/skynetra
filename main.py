@@ -1,104 +1,150 @@
+import time
 import cv2
 import torch
-import torch.nn as nn
+import numpy as np
+import onnxruntime as ort
 from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 
 # ------------------------------------------------------
 # Model / Utils Imports
 # ------------------------------------------------------
-from models.inception_resnet_v1 import InceptionResnetV1
 from detectors.yolo_face_detector import FaceDetector
 from detectors.async_gpu_detector import AsyncGPUDetector
 from trackers.byte_tracker_wrapper import create_tracker
 from utils.sampling import FrameSampler
-from utils.face_utils import crop_face, empty_boxes
-from utils.embedding_ops import (
-    normalize_embeddings,
-    pool_embeddings,
-    refine_identity,
-    identify_person,
-)
+from utils.face_utils import empty_boxes
+from utils.embedding_ops import pool_embeddings, refine_identity,identify_person
 from utils.visualize import draw_tracks
-
-# --- Hopfield & Identity persistence ---
 from utils.hopfield_layer import HopfieldLayer
 from utils.identities.store import IdentityStore
 
 
-def run():
-    """
-    Main Skynetra pipeline.
+# ------------------------------------------------------
+# ONNX preprocessing (CPU, unavoidable)
+# ------------------------------------------------------
+def preprocess_face_onnx(face_rgb):
+    face = cv2.resize(face_rgb, (112, 112))
+    face = face.astype(np.float32)
+    face = (face - 127.5) / 128.0
+    face = np.transpose(face, (2, 0, 1))
+    return face
 
-    Architecture:
-    - YOLO face detector (async, sparse)
-    - ByteTrack tracker (every frame)
-    - Sampler controls detector invocation
-    - FaceNet embeddings + Hopfield identity refinement
-    """
+
+def safe_crop_np(frame_rgb, box):
+    x1, y1, x2, y2 = map(int, box)
+    h, w = frame_rgb.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    face = frame_rgb[y1:y2, x1:x2]
+    return None if face.size == 0 else face
+
+
+# ------------------------------------------------------
+# GPU rolling buffer
+# ------------------------------------------------------
+def update_gpu_buffer(buf, emb, max_len):
+    if buf is None:
+        return emb.unsqueeze(0)
+    buf = torch.cat([buf, emb.unsqueeze(0)], dim=0)
+    if buf.shape[0] > max_len:
+        buf = buf[-max_len:]
+    return buf
+
+
+# ------------------------------------------------------
+# Main
+# ------------------------------------------------------
+def run():
+    cv2.setUseOptimized(True)
+    cv2.setNumThreads(0)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    frame_count = 0
+    start_total = time.perf_counter()
+    t_det, t_track, t_emb = [], [], []
 
     # --------------------------------------------------
-    # Models
+    # Detector / Tracker
     # --------------------------------------------------
-    base_detector = FaceDetector(
-        "models/yolov8n-face-lindevs.pt", device
-    )
+    base_detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
     face_detector = AsyncGPUDetector(base_detector, device)
 
     tracker = create_tracker()
     sampler = FrameSampler()
 
-    # Face embedding model
-    resnet = InceptionResnetV1(
-        pretrained=None, classify=False, device=device
+    # --------------------------------------------------
+    # ONNX Runtime GPU (NUMPY OUTPUT – SUPPORTED)
+    # --------------------------------------------------
+    ort_session = ort.InferenceSession(
+        "models/mobilefacenet.onnx",
+        providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
     )
-    resnet.logits = nn.Linear(512, 8631)
-    state_dict = torch.load(
-        "models/facenet_20180402_114759_vggface2.pth",
-        map_location=device,
-    )
-    resnet.load_state_dict(state_dict)
-    resnet.eval().to(device)
+
+    onnx_input = ort_session.get_inputs()[0].name
+    onnx_output = ort_session.get_outputs()[0].name
+
+    # Warm-up
+    dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
+    _ = ort_session.run([onnx_output], {onnx_input: dummy})
 
     # --------------------------------------------------
-    # Identity Gallery (persistent)
+    # Identity Store (128-D)
     # --------------------------------------------------
     store = IdentityStore.from_path("identities", device=device)
 
-    if len(store.store) > 0:
+    if store.store:
         id_names = [info.name for info in store.store]
         gallery = store.embeddings.to(device)
         gallery = gallery / gallery.norm(dim=1, keepdim=True)
         hop = HopfieldLayer(gallery, device=device)
     else:
-        id_names = []
-        gallery = torch.empty((0, 512), device=device)
-        hop = None
+        id_names, gallery, hop = [], torch.empty((0, 128), device=device), None
+
+    identity_memory = {}
+    identity_memory_pooled = {}
+    identity_labels = {}
 
     # --------------------------------------------------
-    # Runtime Buffers
+    # Async detector queue
     # --------------------------------------------------
-    identity_memory = {}         # tid → rolling embeddings
-    identity_memory_pooled = {} # tid → final embedding
-    identity_labels = {}         # tid → label string
-
-    executor = ThreadPoolExecutor(max_workers=1)
-    pending = None              # async detector future
-    last_boxes = None           # last detector result
-    detector_fresh = False      # true ONLY when detector just finished
+    executor = ThreadPoolExecutor(max_workers=2)
+    pending = deque(maxlen=2)
+    last_boxes = None
+    detector_fresh = False
 
     # --------------------------------------------------
-    # Video IO
+    # Video
     # --------------------------------------------------
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    source = input("Source (video / webcam): ").strip().lower()
+    assert source in {"video", "webcam"}
+
+    save_output = False
+    video_writer = None
+
+    if source == "video":
+        video_path = input("Video path: ").strip()
+        cap = cv2.VideoCapture(video_path)
+        ret, frame = cap.read()
+        if not ret:
+            raise RuntimeError("Failed to read video")
+
+        save_output = input("Save output video? (y/n): ").strip().lower() == "y"
+        if save_output:
+            fps = int(input("Enter FPS for output video: "))
+            h, w = frame.shape[:2]
+            video_writer = cv2.VideoWriter(
+                "skynetra_tracking.mp4",
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (w, h),
+            )
+    else:
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     min_samples = 10
-
-    cv2.namedWindow("Skynetra Tracking", cv2.WINDOW_NORMAL)
-
     tracks = []
 
-    print("🚀 Skynetra pipeline running... press ESC to quit")
+    print("🚀 Skynetra running — ESC to quit")
 
     # ==================================================
     # Main Loop
@@ -106,112 +152,134 @@ def run():
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("⚠️ Video ended or camera unavailable.")
             break
 
-        # ----------------------------------------------
-        # 1. Sampler decides whether detector MAY run
-        # ----------------------------------------------
-        run_det, reason = sampler.should_run_detector(tracks)
-        if run_det and pending is None:
-            pending = executor.submit(
-                face_detector.infer, frame.copy()
-            )
-            print(f"🔍 Detector triggered: {reason}")
-        else:
-            print(f"⏭️ Detector skipped: {reason}")
+        frame_count += 1
+        t0 = time.perf_counter()
 
-        # ----------------------------------------------
-        # 2. Collect async detector result (if ready)
-        # ----------------------------------------------
-        if pending and pending.done():
+        # Detector scheduling
+        run_det, _ = sampler.should_run_detector(tracks)
+        if run_det and len(pending) < 2:
+            pending.append(executor.submit(face_detector.infer, frame.copy()))
+
+        if pending and pending[0].done():
             try:
-                last_boxes = pending.result()
+                last_boxes = pending.popleft().result()
                 detector_fresh = True
-            except Exception as e:
-                print("⚠️ Detector error:", e)
+            except Exception:
                 last_boxes = None
-            pending = None
 
-        # ----------------------------------------------
-        # 3. Tracker update (EVERY frame)
-        # ----------------------------------------------
-        boxes = (
-            last_boxes if last_boxes is not None
-            else empty_boxes(device)
-        )
+        t1 = time.perf_counter()
 
+        # Tracker (CPU)
+        boxes = last_boxes if last_boxes is not None else empty_boxes(device)
         if boxes.data.is_cuda:
             boxes.data = boxes.data.cpu()
 
         tracks = tracker.update(boxes)
 
-        # Acknowledge detection exactly once
         if detector_fresh:
             sampler.record_detection(tracks)
             detector_fresh = False
 
-        # ----------------------------------------------
-        # 4. Face embedding & identity logic
-        # ----------------------------------------------
-        faces, tids = [], []
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        t2 = time.perf_counter()
+
+        # --------------------------------------------------
+        # Face embedding (ONNX GPU → NumPy → GPU ONCE)
+        # --------------------------------------------------
+        frame_rgb = frame[..., ::-1]
 
         for t in tracks:
-            if t[6] > 0:  # not confirmed
+            if t[6] > 0:
                 continue
 
-            face = crop_face(frame_rgb, t[0:4])
-            if face is not None:
-                faces.append(face)
-                tids.append(t[4])
+            x1, y1, x2, y2 = t[0:4]
+            if (x2 - x1) < 40 or (y2 - y1) < 40:
+                continue
 
-        if faces:
-            faces = torch.stack(faces).to(device)
-            with torch.no_grad():
-                embs = normalize_embeddings(resnet(faces))
+            face = safe_crop_np(frame_rgb, (x1, y1, x2, y2))
+            if face is None:
+                continue
 
-            for tid, emb in zip(tids, embs):
-                buf = identity_memory.setdefault(tid, [])
-                buf.append(emb.cpu())
+            face_np = preprocess_face_onnx(face)
+            face_np = np.expand_dims(face_np, axis=0)
 
-                if len(buf) > min_samples:
-                    buf.pop(0)
+            # ---- ONNX inference (GPU, returns NumPy) ----
+            emb_np = ort_session.run(
+                [onnx_output],
+                {onnx_input: face_np}
+            )[0][0]
 
-                # Pool + identify once per track
-                if tid not in identity_memory_pooled and len(buf) >= min_samples:
-                    pooled = pool_embeddings(buf, device=device)
-                    refined, _, energy, delta = refine_identity(pooled, hop)
+            # ---- normalize on CPU (cheap) ----
+            emb_np /= np.linalg.norm(emb_np)
+
+            # ---- CPU → GPU ONCE ----
+            emb = torch.from_numpy(emb_np).to(device, non_blocking=True)
+
+            tid = t[4]
+
+            identity_memory[tid] = update_gpu_buffer(
+                identity_memory.get(tid),
+                emb,
+                min_samples
+            )
+
+            if tid not in identity_memory_pooled:
+                buf = identity_memory[tid]
+                if buf.shape[0] >= min_samples:
+                    pooled = pool_embeddings(buf,device=device)
+                    refined, _, energy, delta= refine_identity(pooled, hop)
+
                     name, score = identify_person(
-                        refined, gallery, id_names, delta
+                        refined=refined,
+                        gallery=gallery,
+                        id_names=id_names,
+                        delta=float(delta),   # or delta if you expose it
+                        threshold=0.7,
+                        delta_threshold=0.2,
                     )
 
-                    identity_memory_pooled[tid] = refined.cpu()
+                    identity_memory_pooled[tid] = refined
                     identity_labels[tid] = f"{name} ({score:.2f})"
 
                     sampler.update_id_confidence(tid, score)
-                    sampler.update_id_energy(tid, energy)
-                    sampler.update_id_embedding(tid, refined.cpu())
+                    sampler.update_id_energy(tid, float(energy))
+                    sampler.update_id_embedding(tid, refined.detach().cpu())
 
-        # ----------------------------------------------
-        # 5. Visualization
-        # ----------------------------------------------
+        t3 = time.perf_counter()
+
+        # --------------------------------------------------
+        # Visualization
+        # --------------------------------------------------
         frame = draw_tracks(frame, tracks, identity_labels)
-        cv2.imshow("Skynetra Tracking", frame)
+        if save_output:
+            video_writer.write(frame)
+        # cv2.imshow("Skynetra Tracking", frame)
+        # if cv2.waitKey(1) & 0xFF == 27:
+        #     break
 
-        # ----------------------------------------------
-        # 6. Controls
-        # ----------------------------------------------
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27:
-            break
+        t_det.append((t1 - t0) * 1000)
+        t_track.append((t2 - t1) * 1000)
+        t_emb.append((t3 - t2) * 1000)
 
     # --------------------------------------------------
-    # Cleanup
+    # Cleanup + stats
     # --------------------------------------------------
     cap.release()
-    cv2.destroyAllWindows()
-    print("🧹 Clean shutdown, bye.")
+    if save_output:
+        video_writer.release()
+    # cv2.destroyAllWindows()    
+
+    total = time.perf_counter() - start_total
+    fps = frame_count / total
+
+    print("\n📊 Benchmark")
+    print(f"Frames: {frame_count}")
+    print(f"Throughput FPS: {fps:.2f}")
+    print(f"Detector avg: {sum(t_det)/len(t_det):.2f} ms")
+    print(f"Tracker avg:  {sum(t_track)/len(t_track):.2f} ms")
+    print(f"Embedding avg:{sum(t_emb)/len(t_emb):.2f} ms")
+    print("🧹 Clean shutdown")
 
 
 if __name__ == "__main__":

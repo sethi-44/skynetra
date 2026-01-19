@@ -5,11 +5,15 @@ from utils.hopfield_layer import HopfieldLayer
 def normalize_embeddings(embs):
     return F.normalize(embs, dim=1)
 
-def pool_embeddings(buf,device):
+def pool_embeddings(buf, device):
     """
     Hopfield-pooling over buffer embeddings
     turns raw temporal embeddings into a stable identity representation
     """
+    # Convert deque or other iterables to list for torch.stack
+    if not isinstance(buf, (list, tuple)):
+        buf = list(buf)
+    
     buf_tensor = torch.stack(buf).to(device)
     mean_init = buf_tensor.mean(dim=0)
     hop_buf = HopfieldLayer(buf_tensor, device=device)
@@ -34,24 +38,42 @@ def refine_identity(pooled, hop):
 
 
 
-def identify_person(refined, gallery, id_names,delta,threshold=0.8,delta_threshold=0.2):
+import torch
+
+def identify_person(
+    refined,
+    gallery,
+    id_names,
+    delta,
+    threshold=0.7,
+    delta_threshold=0.2,
+):
     """
-    cosine / dot similarity over gallery identities
-    returns best match + similarity score
+    GPU-safe cosine / dot similarity identity matching.
+    Returns (name, score).
     """
-    print("Delta:", delta)
+
+    # ---- Delta gate: unstable identity ----
     if delta < delta_threshold:
         return "Unknown", 0.0
-    # Ensure both tensors are on the same device as `refined` to avoid CPU/CUDA mismatch
-    if hasattr(refined, 'device'):
-        gallery = gallery.to(refined.device)
-        refined = refined.to(refined.device)
-    best_name="Unknown"
-    best_score=0.0
-    scores = torch.matmul(gallery, refined)
-    best_idx = scores.argmax().item()
-    best_name = id_names[best_idx]
-    best_score = scores[best_idx].item()
-    if best_score<threshold:
-        best_name="Unknown"
+
+    # ---- Empty gallery safety ----
+    if gallery.numel() == 0:
+        return "Unknown", 0.0
+
+    # ---- Ensure same device (no silent CPU syncs) ----
+    device = refined.device
+    gallery = gallery.to(device, non_blocking=True)
+
+    # ---- Similarity ----
+    scores = torch.matmul(gallery, refined)  # (N,)
+    best_score, best_idx = torch.max(scores, dim=0)
+
+    best_score = float(best_score)
+    best_name = id_names[int(best_idx)]
+
+    # ---- Similarity threshold gate ----
+    if best_score < threshold:
+        return "Unknown", best_score
+
     return best_name, best_score

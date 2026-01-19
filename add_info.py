@@ -1,24 +1,25 @@
 """
-Skynetra Identity Builder
-------------------------
+Skynetra Identity Builder (MobileFaceNet ONNX)
+---------------------------------------------
 
 Create or extend a face identity using:
 - video file
 - webcam stream
 - optional reference image
 
-Features:
-- Hopfield refinement
-- Duplicate prevention
-- Prototype embedding accumulation
+Embedding backend:
+- MobileFaceNet (ONNX Runtime)
+
+IMPORTANT:
+- This MUST match the runtime embedding model.
 """
 
 import os
 import cv2
 import torch
-import torch.nn as nn
+import numpy as np
+import onnxruntime as ort
 
-from models.inception_resnet_v1 import InceptionResnetV1
 from detectors.yolo_face_detector import FaceDetector
 from utils.hopfield_layer import HopfieldLayer
 from utils.identities.store import IdentityStore
@@ -27,37 +28,46 @@ from utils.identities.store import IdentityStore
 # ------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------
-MIN_FACE_EMBS = 5          # minimum frames required
-PRINT_EVERY = 15           # progress print interval
-WEBCAM_INDEX = 0           # default webcam
+MIN_FACE_EMBS = 5
+PRINT_EVERY = 15
+WEBCAM_INDEX = 0
 
 
 # ------------------------------------------------------------
-# Utility functions
+# ONNX face preprocessing
 # ------------------------------------------------------------
-def embed_face(img, resnet, device):
+def preprocess_face(face_rgb):
     """
-    Resize, normalize and embed a cropped face.
-    Returns L2-normalized embedding.
+    face_rgb: (H, W, 3) RGB uint8
+    returns: (3, 112, 112) float32 normalized
     """
-    img = cv2.resize(img, (160, 160))
-    tensor = (
-        torch.tensor(img)
-        .permute(2, 0, 1)
-        .unsqueeze(0)
-        .float()
-        .to(device) / 255.0
-    )
-    with torch.no_grad():
-        emb = resnet(tensor).squeeze(0)
-        emb = emb / emb.norm()
-    return emb
+    face = cv2.resize(face_rgb, (112, 112))
+    face = face.astype(np.float32)
+    face = (face - 127.5) / 128.0
+    face = np.transpose(face, (2, 0, 1))
+    return face
 
 
+def embed_face(face_rgb, ort_session, input_name, output_name):
+    """
+    Returns L2-normalized embedding (torch tensor, 128-D)
+    """
+    face = preprocess_face(face_rgb)
+    face = np.expand_dims(face, axis=0)
+
+    emb = ort_session.run(
+        [output_name],
+        {input_name: face}
+    )[0][0]
+
+    emb = emb / np.linalg.norm(emb)
+    return torch.from_numpy(emb).float()
+
+
+# ------------------------------------------------------------
+# Utility
+# ------------------------------------------------------------
 def safe_crop(frame, box):
-    """
-    Crop bounding box safely within image bounds.
-    """
     x1, y1, x2, y2 = map(int, box)
     h, w = frame.shape[:2]
     x1, y1 = max(0, x1), max(0, y1)
@@ -66,25 +76,21 @@ def safe_crop(frame, box):
 
 
 def select_face_box(boxes):
-    """
-    Select first detected face.
-    Assumes YOLO Boxes object.
-    """
     xy = boxes.xyxy[0].cpu().numpy()
     return map(int, xy[:4])
 
 
 # ------------------------------------------------------------
-# Input handling
+# Operator input
 # ------------------------------------------------------------
 print(
     "\nHello Operator.\n"
     "You are about to mint identity embeddings.\n"
-    "Mistakes will be remembered forever.\n"
+    "These embeddings define reality.\n"
 )
 
 source = input("Source (video / webcam): ").strip().lower()
-assert source in {"video", "webcam"}, "Invalid source"
+assert source in {"video", "webcam"}
 
 if source == "video":
     video_path = input("Video path: ").strip()
@@ -103,21 +109,31 @@ ref_img = cv2.imread(ref_image_path) if use_ref else None
 
 
 # ------------------------------------------------------------
-# Device & models
+# Device & ONNX Runtime
 # ------------------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"\n[i] Device: {device}\n")
 
-detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
+providers = []
+if device == "cuda":
+    providers.append("CUDAExecutionProvider")
+providers.append("CPUExecutionProvider")
 
-resnet = InceptionResnetV1(pretrained=None, classify=False, device=device)
-resnet.logits = nn.Linear(512, 8631)
-state_dict = torch.load(
-    "models/facenet_20180402_114759_vggface2.pth",
-    map_location=device
+ort_session = ort.InferenceSession(
+    "models/mobilefacenet.onnx",
+    providers=providers
 )
-resnet.load_state_dict(state_dict)
-resnet.eval().to(device)
+
+onnx_input = ort_session.get_inputs()[0].name
+onnx_output = ort_session.get_outputs()[0].name
+
+# Warm-up
+dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
+_ = ort_session.run([onnx_output], {onnx_input: dummy})
+
+print("[i] MobileFaceNet ONNX ready\n")
+
+detector = FaceDetector("models/yolov8n-face-lindevs.pt", device)
 
 
 # ------------------------------------------------------------
@@ -151,7 +167,8 @@ try:
         if face.size == 0:
             continue
 
-        emb = embed_face(face, resnet, device)
+        face_rgb = face[..., ::-1]
+        emb = embed_face(face_rgb, ort_session, onnx_input, onnx_output)
         video_embs.append(emb)
 
         if source == "webcam":
@@ -183,14 +200,15 @@ pooled_emb = HopfieldLayer(
 ).refine(mean_emb)
 
 if use_ref:
-    ref_emb = embed_face(ref_img, resnet, device)
+    ref_rgb = ref_img[..., ::-1]
+    ref_emb = embed_face(ref_rgb, ort_session, onnx_input, onnx_output)
     pooled_emb = (pooled_emb + ref_emb) / 2
     pooled_emb = pooled_emb / pooled_emb.norm()
     print("[i] Reference image fused.\n")
 
 
 # ------------------------------------------------------------
-# Identity store operations
+# Identity store
 # ------------------------------------------------------------
 store = IdentityStore.from_path("identities", device=device)
 
@@ -199,7 +217,7 @@ for i, info in enumerate(store.store):
     print(f"  [{i}] {info.name}")
 
 mode = input("\nAction (new / extend): ").strip().lower()
-assert mode in {"new", "extend"}, "Invalid action"
+assert mode in {"new", "extend"}
 
 if mode == "new":
     if store.is_duplicate(pooled_emb):
@@ -214,9 +232,9 @@ if mode == "new":
         store.save("identities")
         print(f"\n[✔] New identity saved: #{idx} — {name}")
 
-else:  # extend existing
+else:
     idx = int(input("Identity index to extend: ").strip())
-    assert 0 <= idx < len(store.store), "Invalid index"
+    assert 0 <= idx < len(store.store)
 
     store.extend_identity(idx, pooled_emb)
     store.save("identities")
