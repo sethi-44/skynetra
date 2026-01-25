@@ -1,4 +1,3 @@
-```markdown
 # Skynetra 🛩️
 
 **Skynetra** is a **modular, real-time face detection, tracking, and identification pipeline** built for video streams — especially aerial, drone, and edge scenarios.
