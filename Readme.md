@@ -1,4 +1,4 @@
-# Skynetra 🛩️
+# Skynetra 
 
 **Skynetra** is a **modular, real-time face detection, tracking, and identification pipeline** built for video streams — especially aerial, drone, and edge scenarios.
 
@@ -66,7 +66,7 @@ Tested on ~20-minute 720p video (raw pipeline, no rendering).
 ## Why Skynetra?
 
 This isn't just another face-recognition script you see in phones or basic demos.  
-It has **actual temporal memory** via the Hopfield layer — reducing **automation bias** through robust, event-based identification that mimics how humans remember and associate faces over time.
+It has **actual temporal memory** via the Hopfield layer — reducing **[automation bias](https://en.wikipedia.org/wiki/Automation_bias)** through robust, event-based identification that mimics how humans remember and associate faces over time.
 
 Built for **real-world deployment** — drones, border surveillance, robotics, edge cameras — where flickering IDs, high latency, or fragile persistence destroy usability.
 
