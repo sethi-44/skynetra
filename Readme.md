@@ -85,4 +85,3 @@ Thanks for reading!
 If you're building drones, surveillance, edge AI, or just love modular CV pipelines — fork it, break it, improve it. Let's make something useful together. 🚀
 
 Harshit
-```
