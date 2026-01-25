@@ -33,7 +33,7 @@ That's literally it. No complicated setup. Just run and watch.
 **Left**: Raw input video  
 **Right**: Skynetra output with YOLOv8-Face detection, ByteTrack tracking, MobileFaceNet embeddings, Hopfield temporal pooling, and **stable, persistent IDs** (no jumping around!)
 
-![Skynetra Demo - Raw vs Processed](https://github.com/user-attachments/assets/58ce3822-ab77-498d-81e7-2b18abda928a.gif)
+![Skynetra Demo - Raw vs Processed](assets/534364962-58ce3822-ab77-498d-81e7-2b18abda928a.gif)
 
 (Looping 8-second Full HD clip processed in real-time. Watch how IDs stay consistent across frames.)
 
