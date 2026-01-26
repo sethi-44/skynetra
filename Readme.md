@@ -47,21 +47,34 @@ That's literally it. No complicated setup. Just run and watch.
 - **TensorRT compilation** support (planned full integration)
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
 
-## Performance Benchmarks (Latest – Jan 2026)
+##Performance Benchmarks (Jan 2026)
 
-**Major upgrade**: Switched from FaceNet → **MobileFaceNet ONNX** + eliminated redundant CPU↔GPU memory transfers.
+Pipeline: YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
+Mode: Raw pipeline (no visualization unless stated)
+Hardware: RTX 2050 Laptop GPU + Intel i5-12450H
+Content: High-motion, crowded real-world videos
 
-Tested on ~20-minute 720p video (raw pipeline, no rendering).
+Raw Throughput (No Rendering)
+Resolution	Avg FPS	Detector (ms)	Tracker (ms)	Embedding (ms)	Notes
+720p	~130	~0.2	~1.5	~3.0	Fully real-time
+1080p	~50	~0.5	~1.8	~6.0	Stable IDs
+4K	~14	~2.0	~1.3	~7.7	Pixel-bound
 
-| Hardware                  | Resolution | Avg FPS (raw) | Avg Latency (ms/frame) | Notes                                      |
-|---------------------------|------------|---------------|-------------------------|--------------------------------------------|
-| RTX 2050 Laptop GPU       | 720p       | ~120          | ~8.3                    | MobileFaceNet ONNX + optimizations         |
-| RTX 2050 Laptop GPU (old) | 1080p      | 19–20         | 22.7–22.9               | Previous FaceNet baseline (~6× speedup)    |
-| Intel Core i5-12450H CPU  | 720p       | TBD           | TBD                     | CPU fallback (pending tests)               |
+FPS = total frames processed / total runtime
 
-- FPS = total frames processed / total time (excluding video I/O)
-- Latency = average per-frame pipeline time (detection + tracking + embedding + pooling + decision)
-- Future tests: Jetson Orin / edge hardware, 4K input, int8/FP16 quantization
+Latencies are per-frame averages across full runs
+
+Tracker cost remains nearly constant across resolutions
+
+Embedding cost scales mainly with number of faces, not pixels
+
+With Visualization / Rendering Enabled
+Resolution	Avg FPS	Notes
+720p	~90	OpenCV overlay + ID drawing
+1080p	~43	Smooth playback
+4K	~13	Rendering becomes dominant
+
+Rendering overhead is outside the core pipeline and can be disabled for deployment.
 
 ## Why Skynetra?
 
