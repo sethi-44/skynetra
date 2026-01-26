@@ -40,7 +40,7 @@ That's literally it. No complicated setup. Just run and watch.
 
 - Real-time processing — **~120 FPS raw** on 720p (no rendering/visualization overhead)
 - **Persistent identity storage** — JSON metadata + tensor files via `add_info.py` — auto-loads known faces on startup
-- **Modern Hopfield layer** — temporal embedding pooling that acts like actual human associative memory
+- **Modern Hopfield layer** — temporal embedding pooling inspired by [Modern Hopfield Networks (Ramsauer et al., 2021)](https://arxiv.org/abs/2008.02217), acting like associative human memory
 - **Smart frame sampling** with tracker feedback
 - **Asynchronous GPU detection** — sparse YOLOv8-Face + dense ByteTrack
 - **Fully modular** — swap detector, tracker, embedder, pooling, etc. without touching core logic
