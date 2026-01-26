@@ -47,7 +47,7 @@ That's literally it. No complicated setup. Just run and watch.
 - **TensorRT compilation** support (planned full integration)
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
 
-##Performance Benchmarks (Jan 2026)
+Performance Benchmarks (Jan 2026)
 
 Pipeline: YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
 Mode: Raw pipeline (no visualization unless stated)
