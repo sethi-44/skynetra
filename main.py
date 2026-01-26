@@ -1,5 +1,6 @@
 import time
 import cv2
+from scipy.datasets import face
 import torch
 import numpy as np
 import onnxruntime as ort
@@ -19,9 +20,9 @@ from utils.visualize import draw_tracks
 from utils.hopfield_layer import HopfieldLayer
 from utils.identities.store import IdentityStore
 from utils.trt_mobilefacenet import TRTMobileFaceNet
+from utils.quality_checker import TemporalConsistencyChecker,FaceQualityChecker
 
 TRT_MAX_BATCH = 8
-MIN_FACE_SIZE = 40
 MIN_SAMPLES = 10
 # ------------------------------------------------------
 # Preprocessing
@@ -32,6 +33,30 @@ def preprocess_face(face_rgb):
     face = (face - 127.5) / 128.0
     face = np.transpose(face, (2, 0, 1))
     return face
+
+def filter_detections_pre_track(boxes, min_size=40, min_conf=0.4):
+    if boxes is None or len(boxes) == 0:
+        return boxes
+
+    b = boxes.data.cpu().numpy()
+    keep = []
+
+    for i, box in enumerate(b):
+        x1, y1, x2, y2, conf = box[:5]
+
+        if conf < min_conf:
+            continue
+        if (x2 - x1) < min_size or (y2 - y1) < min_size:
+            continue
+
+        keep.append(i)
+
+    if not keep:
+        return empty_boxes("cpu")
+
+    boxes.data = boxes.data[keep]
+    return boxes
+
 
 def sanitize_boxes(boxes):
     """
@@ -115,29 +140,66 @@ def embed_faces_trt(trt_embedder, faces, tids, device):
         outputs.extend(zip(t, embs))
 
     return outputs
+
+def pool_embeddings_weighted(embs, weights, device):
+    """
+    Quality-weighted Hopfield pooling.
+    embs: Tensor [N, D]
+    weights: Tensor [N]
+    """
+    embs = embs.to(device)
+    w = weights.to(device)
+
+    w = w / w.sum().clamp(min=1e-6)
+
+    mean_init = (embs * w.unsqueeze(1)).sum(dim=0)
+    mean_init = mean_init / mean_init.norm().clamp(min=1e-6)
+
+    hop = HopfieldLayer(embs, device=device)
+    return hop.refine(mean_init)
+
 # ------------------------------------------------------
 # Fixed-size rolling buffer (preallocated)
 # ------------------------------------------------------
 class EmbeddingBuffer:
     def __init__(self, max_len, dim, device):
-        self.buf = torch.empty((max_len, dim), device=device)
+        self.emb = torch.empty((max_len, dim), device=device)
+        self.w   = torch.empty((max_len,), device=device)
         self.max_len = max_len
         self.ptr = 0
         self.count = 0
 
-    def add(self, emb):
-        self.buf[self.ptr] = emb
+    def add(self, emb, weight=1.0):
+        self.emb[self.ptr] = emb
+        self.w[self.ptr] = weight
         self.ptr = (self.ptr + 1) % self.max_len
         self.count = min(self.count + 1, self.max_len)
 
     def full(self):
         return self.count >= self.max_len
 
-    def get(self):
+    def get_weighted(self):
         if self.count < self.max_len:
-            return self.buf[:self.count]
-        idx = torch.arange(self.ptr, self.ptr + self.max_len, device=self.buf.device) % self.max_len
-        return self.buf[idx]
+            embs = self.emb[:self.count]
+            w = self.w[:self.count]
+        else:
+            idx = torch.arange(
+                self.ptr, self.ptr + self.max_len, device=self.emb.device
+            ) % self.max_len
+            embs = self.emb[idx]
+            w = self.w[idx]
+
+        w = w / w.sum().clamp(min=1e-6)
+        pooled = (embs * w.unsqueeze(1)).sum(dim=0)
+        return pooled / pooled.norm().clamp(min=1e-6)
+    def get_all(self):
+        if self.count < self.max_len:
+            return self.emb[:self.count], self.w[:self.count]
+        idx = torch.arange(
+            self.ptr, self.ptr + self.max_len, device=self.emb.device
+        ) % self.max_len
+        return self.emb[idx], self.w[idx]
+
 
 
 
@@ -153,6 +215,18 @@ def run():
     frame_count = 0
     
     t_det, t_track, t_emb = [], [], []
+
+    # --------------------------------------------------
+    # Face quality
+    # --------------------------------------------------
+    quality_checker = FaceQualityChecker(
+        min_face_size=80,   # overrides MIN_FACE_SIZE effectively
+    )
+
+    temporal_quality = TemporalConsistencyChecker(
+        memory=10,
+        threshold=0.65
+    )
 
     # --------------------------------------------------
     # Detector / Tracker
@@ -264,12 +338,23 @@ def run():
         t1 = time.perf_counter()
 
         # Tracker (CPU)
+        # Ensure CPU for ByteTrack
         if last_boxes is not None and last_boxes.data.is_cuda:
             last_boxes = last_boxes.to("cpu", non_blocking=True)
-        boxes = last_boxes if last_boxes is not None else empty_boxes(device)
-        
-        boxes = sanitize_boxes(boxes)
+
+        # Decide what to feed the tracker
+        if detector_fresh and last_boxes is not None:
+            boxes = sanitize_boxes(last_boxes)
+            boxes = filter_detections_pre_track(boxes)
+        else:
+            boxes = last_boxes if last_boxes is not None else empty_boxes("cpu")
+
         tracks = tracker.update(boxes)
+
+
+
+        active_ids = {t[4] for t in tracks if t[6] == 0}
+        temporal_quality.cleanup(active_ids)
 
         if detector_fresh:
             sampler.record_detection(tracks)
@@ -277,43 +362,60 @@ def run():
 
         t2 = time.perf_counter()
 
-        # --------------------------------------------------
-        # Face embedding (ONNX GPU → NumPy → GPU ONCE)
-        # --------------------------------------------------
         frame_rgb = frame[..., ::-1]
-        faces, tids = [], []
+        faces, tids, qualities = [], [], []
 
         for t in tracks:
             if t[6] > 0:
                 continue
 
-            x1, y1, x2, y2 = t[0:4]
-            if (x2 - x1) < MIN_FACE_SIZE or (y2 - y1) < MIN_FACE_SIZE:
-                continue
+            x1, y1, x2, y2 = map(int, t[0:4])
+
 
             face = safe_crop_np(frame_rgb, (x1, y1, x2, y2))
             if face is None:
                 continue
 
+            
+            face_bgr = face[..., ::-1]
+            # ---- QUALITY ASSESSMENT ----
+            report = quality_checker.assess(
+                face_bgr=face_bgr,
+                box=(x1, y1, x2, y2),
+                frame_shape=frame.shape
+            )
+
+            q = report["quality"]
+
+            # Hard floor: never embed trash
+            if q < 0.4:
+                continue
+
             faces.append(preprocess_face(face))
             tids.append(t[4])
+            qualities.append(q)
 
         # ---------------- Embedding ----------------
         if faces:
             embed_result = embed_faces_trt(trt_embedder, faces, tids, device) 
-            for tid,emb in embed_result:
+            for (tid,emb),q in zip(embed_result, qualities):
+                # ---- TEMPORAL QUALITY CHECK ----
+                quality_ok = temporal_quality.update(tid, q)
+                if not quality_ok:
+                    continue
+
                 if tid not in identity_memory:
                     identity_memory[tid] = EmbeddingBuffer(
                         MIN_SAMPLES,EMB_DIM,device
                     )  
                 buf = identity_memory[tid]
-                buf.add(emb)  
+                buf.add(emb,weight=q)  
 
                 do_reid=buf.full()
                 if do_reid and tid not in identity_memory_pooled:
-                    emb_buf = buf.get()  
+                    emb_buf ,weights= buf.get_all()
 
-                    pooled = pool_embeddings(emb_buf,device=device)
+                    pooled = pool_embeddings_weighted(emb_buf,weights,device=device)
                     refined, _, energy, delta= refine_identity(pooled, hop)
 
                     name, score = identify_person(
@@ -338,6 +440,8 @@ def run():
         # --------------------------------------------------
         # Visualization
         # --------------------------------------------------
+        tracks = [t for t in tracks if t[6] == 0]
+
         frame = draw_tracks(frame, tracks, identity_labels)
         if save_output:
             video_writer.write(frame)
