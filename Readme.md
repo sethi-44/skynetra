@@ -46,6 +46,7 @@ That's literally it. No complicated setup. Just run and watch.
 - **Fully modular** — swap detector, tracker, embedder, pooling, etc. without touching core logic
 - **TensorRT compilation** support
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
+- **Open Set Rejection** explicit Unknown Handling
 
 ## Performance Benchmarks (Jan 2026)
 
@@ -108,7 +109,6 @@ Built for **real-world deployment** — drones, border surveillance, robotics, e
 
 ## Planned Extensions
 
-- Explicit open-set rejection / unknown handling (in progress)
 - Multi-sensor fusion (e.g., IR + RGB gating mechanisms)
 - One-click modularity (easy config-based component swapping)
 
