@@ -47,34 +47,57 @@ That's literally it. No complicated setup. Just run and watch.
 - **TensorRT compilation** support (planned full integration)
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
 
-Performance Benchmarks (Jan 2026)
+## Performance Benchmarks (Jan 2026)
 
-Pipeline: YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
-Mode: Raw pipeline (no visualization unless stated)
-Hardware: RTX 2050 Laptop GPU + Intel i5-12450H
-Content: High-motion, crowded real-world videos
+**Pipeline**  
+YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
 
-Raw Throughput (No Rendering)
-Resolution	Avg FPS	Detector (ms)	Tracker (ms)	Embedding (ms)	Notes
-720p	~130	~0.2	~1.5	~3.0	Fully real-time
-1080p	~50	~0.5	~1.8	~6.0	Stable IDs
-4K	~14	~2.0	~1.3	~7.7	Pixel-bound
+**Mode**  
+Raw pipeline (no visualization unless stated)
 
-FPS = total frames processed / total runtime
+**Hardware**  
+RTX 2050 Laptop GPU + Intel i5-12450H
 
-Latencies are per-frame averages across full runs
+**Content**  
+High-motion, crowded real-world videos
 
-Tracker cost remains nearly constant across resolutions
+---
 
-Embedding cost scales mainly with number of faces, not pixels
+### Raw Throughput (No Rendering)
 
-With Visualization / Rendering Enabled
-Resolution	Avg FPS	Notes
-720p	~90	OpenCV overlay + ID drawing
-1080p	~43	Smooth playback
-4K	~13	Rendering becomes dominant
+| Resolution | Avg FPS | Detector (ms) | Tracker (ms) | Embedding (ms) | Notes |
+|-----------:|--------:|--------------:|-------------:|---------------:|-------|
+| 720p       | ~130    | ~0.2          | ~1.5         | ~3.0           | Fully real-time |
+| 1080p      | ~50     | ~0.5          | ~1.8         | ~6.0           | Stable IDs |
+| 4K         | ~14     | ~2.0          | ~1.3         | ~7.7           | Pixel-bound |
 
-Rendering overhead is outside the core pipeline and can be disabled for deployment.
+- **FPS** = total frames processed / total runtime  
+- Latencies are **per-frame averages** across full runs  
+- Tracker cost remains nearly constant across resolutions  
+- Embedding cost scales mainly with **number of faces**, not pixels  
+
+---
+
+### With Visualization / Rendering Enabled
+
+| Resolution | Avg FPS | Notes |
+|-----------:|--------:|-------|
+| 720p       | ~90     | OpenCV overlay + ID drawing |
+| 1080p      | ~43     | Smooth playback |
+| 4K         | ~13     | Rendering becomes dominant |
+
+Rendering overhead is **outside the core pipeline** and can be disabled for deployment.
+
+---
+
+### Key Observations
+
+- Graceful performance degradation with increasing resolution  
+- No ID flickering under chaotic motion  
+- Tracker is **not** a bottleneck (flat cost across resolutions)  
+- Pipeline becomes **pixel-bound at 4K**, not algorithm-bound  
+- Real-time 4K achievable via detector downscaling or stronger GPUs
+
 
 ## Why Skynetra?
 
