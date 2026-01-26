@@ -55,13 +55,14 @@ class HopfieldLayer:
 
     @torch.no_grad()
     def refine(self, query, max_steps=5, alpha=0.7, tol=1e-4):
-        q = F.normalize(query, dim=-1).to(self.device)
+        q = F.normalize(query.to(self.device), dim=-1)
 
         for _ in range(max_steps):
             retrieved = self.update(q)
-            q_next = F.normalize(alpha*q + (1-alpha)*retrieved, dim=-1)
+            q_next = F.normalize(alpha * q + (1 - alpha) * retrieved, dim=-1)
 
-            delta = 1 - torch.dot(q, q_next).item()
+            cos = torch.clamp(torch.dot(q, q_next), -1.0, 1.0)
+            delta = 1 - cos.item()
             if delta < tol:
                 break
 

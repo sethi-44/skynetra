@@ -18,7 +18,48 @@ from utils.embedding_ops import pool_embeddings, refine_identity,identify_person
 from utils.visualize import draw_tracks
 from utils.hopfield_layer import HopfieldLayer
 from utils.identities.store import IdentityStore
+from utils.trt_mobilefacenet import TRTMobileFaceNet
 
+TRT_MAX_BATCH = 8
+MIN_FACE_SIZE = 40
+MIN_SAMPLES = 10
+# ------------------------------------------------------
+# Preprocessing
+# ------------------------------------------------------
+def preprocess_face(face_rgb):
+    face = cv2.resize(face_rgb, (112, 112))
+    face = face.astype(np.float32)
+    face = (face - 127.5) / 128.0
+    face = np.transpose(face, (2, 0, 1))
+    return face
+
+def sanitize_boxes(boxes):
+    """
+    Remove boxes with invalid geometry that crash ByteTrack.
+    """
+    if boxes is None or len(boxes) == 0:
+        return boxes
+
+    b = boxes.data.cpu().numpy()
+    keep = []
+
+    for i, box in enumerate(b):
+        x1, y1, x2, y2 = box[:4]
+        w = x2 - x1
+        h = y2 - y1
+
+        if w <= 1 or h <= 1:
+            continue
+        if not np.isfinite([x1, y1, x2, y2]).all():
+            continue
+
+        keep.append(i)
+
+    if not keep:
+        return empty_boxes("cpu")
+
+    boxes.data = boxes.data[keep]
+    return boxes
 
 # ------------------------------------------------------
 # ONNX preprocessing (CPU, unavoidable)
@@ -50,6 +91,54 @@ def update_gpu_buffer(buf, emb, max_len):
     if buf.shape[0] > max_len:
         buf = buf[-max_len:]
     return buf
+# ------------------------------------------------------
+# TensorRT embedding (BLOCKING, BATCHED)
+# ------------------------------------------------------
+@torch.no_grad()
+def embed_faces_trt(trt_embedder, faces, tids, device):
+    faces = torch.from_numpy(np.stack(faces)).to(
+        device=device,
+        dtype=torch.float16,
+        non_blocking=True
+    )
+
+    outputs = []
+    for i in range(0, faces.shape[0], TRT_MAX_BATCH):
+        f = faces[i:i + TRT_MAX_BATCH]
+        t = tids[i:i + TRT_MAX_BATCH]
+
+        embs = trt_embedder.infer(f).float()
+
+        # ✅ EXPLICIT L2 NORMALIZATION
+        embs = embs / embs.norm(dim=1, keepdim=True).clamp(min=1e-6)
+
+        outputs.extend(zip(t, embs))
+
+    return outputs
+# ------------------------------------------------------
+# Fixed-size rolling buffer (preallocated)
+# ------------------------------------------------------
+class EmbeddingBuffer:
+    def __init__(self, max_len, dim, device):
+        self.buf = torch.empty((max_len, dim), device=device)
+        self.max_len = max_len
+        self.ptr = 0
+        self.count = 0
+
+    def add(self, emb):
+        self.buf[self.ptr] = emb
+        self.ptr = (self.ptr + 1) % self.max_len
+        self.count = min(self.count + 1, self.max_len)
+
+    def full(self):
+        return self.count >= self.max_len
+
+    def get(self):
+        if self.count < self.max_len:
+            return self.buf[:self.count]
+        idx = torch.arange(self.ptr, self.ptr + self.max_len, device=self.buf.device) % self.max_len
+        return self.buf[idx]
+
 
 
 # ------------------------------------------------------
@@ -59,9 +148,10 @@ def run():
     cv2.setUseOptimized(True)
     cv2.setNumThreads(0)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    assert torch.cuda.is_available(), "CUDA required"
+    device = "cuda"
     frame_count = 0
-    start_total = time.perf_counter()
+    
     t_det, t_track, t_emb = [], [], []
 
     # --------------------------------------------------
@@ -74,19 +164,19 @@ def run():
     sampler = FrameSampler()
 
     # --------------------------------------------------
-    # ONNX Runtime GPU (NUMPY OUTPUT – SUPPORTED)
+    # TensorRT embedder
     # --------------------------------------------------
-    ort_session = ort.InferenceSession(
-        "models/mobilefacenet.onnx",
-        providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+    trt_embedder = TRTMobileFaceNet(
+        engine_path="models/mobilefacenet_fp16.trt",
+        device=device
     )
 
-    onnx_input = ort_session.get_inputs()[0].name
-    onnx_output = ort_session.get_outputs()[0].name
+    # Warmup
+    with torch.no_grad():
+        dummy = torch.zeros((4, 3, 112, 112), device=device, dtype=torch.float16)
+        for _ in range(5):
+            trt_embedder.infer(dummy)
 
-    # Warm-up
-    dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
-    _ = ort_session.run([onnx_output], {onnx_input: dummy})
 
     # --------------------------------------------------
     # Identity Store (128-D)
@@ -96,10 +186,12 @@ def run():
     if store.store:
         id_names = [info.name for info in store.store]
         gallery = store.embeddings.to(device)
-        gallery = gallery / gallery.norm(dim=1, keepdim=True)
+        gallery = gallery / gallery.norm(dim=1, keepdim=True).clamp(min=1e-6)
         hop = HopfieldLayer(gallery, device=device)
+        EMB_DIM= gallery.shape[1]
     else:
-        id_names, gallery, hop = [], torch.empty((0, 128), device=device), None
+        id_names, gallery, hop = [], torch.empty((0, 256), device=device), None
+        EMB_DIM = 256
 
     identity_memory = {}
     identity_memory_pooled = {}
@@ -141,10 +233,10 @@ def run():
             )
     else:
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    min_samples = 10
     tracks = []
 
     print("🚀 Skynetra running — ESC to quit")
+    start_total = time.perf_counter()
 
     # ==================================================
     # Main Loop
@@ -172,10 +264,11 @@ def run():
         t1 = time.perf_counter()
 
         # Tracker (CPU)
+        if last_boxes is not None and last_boxes.data.is_cuda:
+            last_boxes = last_boxes.to("cpu", non_blocking=True)
         boxes = last_boxes if last_boxes is not None else empty_boxes(device)
-        if boxes.data.is_cuda:
-            boxes.data = boxes.data.cpu()
-
+        
+        boxes = sanitize_boxes(boxes)
         tracks = tracker.update(boxes)
 
         if detector_fresh:
@@ -188,53 +281,46 @@ def run():
         # Face embedding (ONNX GPU → NumPy → GPU ONCE)
         # --------------------------------------------------
         frame_rgb = frame[..., ::-1]
+        faces, tids = [], []
 
         for t in tracks:
             if t[6] > 0:
                 continue
 
             x1, y1, x2, y2 = t[0:4]
-            if (x2 - x1) < 40 or (y2 - y1) < 40:
+            if (x2 - x1) < MIN_FACE_SIZE or (y2 - y1) < MIN_FACE_SIZE:
                 continue
 
             face = safe_crop_np(frame_rgb, (x1, y1, x2, y2))
             if face is None:
                 continue
 
-            face_np = preprocess_face_onnx(face)
-            face_np = np.expand_dims(face_np, axis=0)
+            faces.append(preprocess_face(face))
+            tids.append(t[4])
 
-            # ---- ONNX inference (GPU, returns NumPy) ----
-            emb_np = ort_session.run(
-                [onnx_output],
-                {onnx_input: face_np}
-            )[0][0]
-
-            # ---- normalize on CPU (cheap) ----
-            emb_np /= np.linalg.norm(emb_np)
-
-            # ---- CPU → GPU ONCE ----
-            emb = torch.from_numpy(emb_np).to(device, non_blocking=True)
-
-            tid = t[4]
-
-            identity_memory[tid] = update_gpu_buffer(
-                identity_memory.get(tid),
-                emb,
-                min_samples
-            )
-
-            if tid not in identity_memory_pooled:
+        # ---------------- Embedding ----------------
+        if faces:
+            embed_result = embed_faces_trt(trt_embedder, faces, tids, device) 
+            for tid,emb in embed_result:
+                if tid not in identity_memory:
+                    identity_memory[tid] = EmbeddingBuffer(
+                        MIN_SAMPLES,EMB_DIM,device
+                    )  
                 buf = identity_memory[tid]
-                if buf.shape[0] >= min_samples:
-                    pooled = pool_embeddings(buf,device=device)
+                buf.add(emb)  
+
+                do_reid=buf.full()
+                if do_reid and tid not in identity_memory_pooled:
+                    emb_buf = buf.get()  
+
+                    pooled = pool_embeddings(emb_buf,device=device)
                     refined, _, energy, delta= refine_identity(pooled, hop)
 
                     name, score = identify_person(
                         refined=refined,
                         gallery=gallery,
                         id_names=id_names,
-                        delta=float(delta),   # or delta if you expose it
+                        delta=float(delta),  
                         threshold=0.7,
                         delta_threshold=0.2,
                     )
@@ -244,7 +330,8 @@ def run():
 
                     sampler.update_id_confidence(tid, score)
                     sampler.update_id_energy(tid, float(energy))
-                    sampler.update_id_embedding(tid, refined.detach().cpu())
+                    sampler.update_id_embedding(tid, refined.detach().cpu())  
+
 
         t3 = time.perf_counter()
 
@@ -254,9 +341,9 @@ def run():
         frame = draw_tracks(frame, tracks, identity_labels)
         if save_output:
             video_writer.write(frame)
-        # cv2.imshow("Skynetra Tracking", frame)
-        # if cv2.waitKey(1) & 0xFF == 27:
-        #     break
+        cv2.imshow("Skynetra Tracking", frame)
+        if cv2.waitKey(1) & 0xFF == 27:
+            break
 
         t_det.append((t1 - t0) * 1000)
         t_track.append((t2 - t1) * 1000)
@@ -268,7 +355,7 @@ def run():
     cap.release()
     if save_output:
         video_writer.release()
-    # cv2.destroyAllWindows()    
+    cv2.destroyAllWindows()    
 
     total = time.perf_counter() - start_total
     fps = frame_count / total
