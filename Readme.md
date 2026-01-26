@@ -7,7 +7,7 @@ It combines modern deep-learning tools with **stateful, event-driven design** to
 - Very low latency
 - Full modularity for easy experimentation and deployment
 
-Hello nerds & founders!!  
+Hello nerds!!  
 Yeah — I know what you're thinking:  
 "What the heck is this Skynetra thing??"  
 But before I explain anything, let's just get it working — because the proof is in the pudding.
