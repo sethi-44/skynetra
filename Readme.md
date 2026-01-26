@@ -44,7 +44,7 @@ That's literally it. No complicated setup. Just run and watch.
 - **Smart frame sampling** with tracker feedback
 - **Asynchronous GPU detection** — sparse YOLOv8-Face + dense ByteTrack
 - **Fully modular** — swap detector, tracker, embedder, pooling, etc. without touching core logic
-- **TensorRT compilation** support (planned full integration)
+- **TensorRT compilation** support
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
 
 ## Performance Benchmarks (Jan 2026)
