@@ -22,7 +22,7 @@ pip install -r requirements.txt
 python add_info.py
 
 # 3. Run the pipeline on a video
-python main.py --video path/to/your/video.mp4
+python main.py
 ```
 
 That's literally it. No complicated setup. Just run and watch.
