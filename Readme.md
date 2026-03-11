@@ -17,6 +17,7 @@ Real-time ISTAR target identification with temporal identity memory
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#system-architecture">Architecture</a> •
+  <a href="#live-demo">Demo</a> •
   <a href="#performance-benchmarks">Benchmarks</a>
 </p>
 
@@ -110,7 +111,7 @@ That's literally it. No complicated setup. Just run and watch.
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
 - **Open Set Rejection** explicit Unknown Handling
 
-## Performance Benchmarks (Jan 2026)
+## Performance Benchmarks
 
 **Pipeline**  
 YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
