@@ -77,6 +77,22 @@ Drone Video Feed → Target Detection (YOLO) → Multi-Object Tracking (ByteTrac
 → Target Embedding Extraction (MobileFaceNet) → Temporal Identity Memory (Hopfield Network)  
 → Identity Recognition + Confidence Score → Operator Decision Support
 
+```
+Drone Video Feed 
+↓ 
+Target Detection (YOLO) 
+↓ 
+Multi-Object Tracking (ByteTrack) 
+↓ 
+Target Embedding Extraction (MobileFaceNet) 
+↓ 
+Temporal Memory Refinement (Hopfield Network) 
+↓ 
+Identity Recognition + Confidence Score 
+↓ 
+Operator Decision Support
+```
+
 Skynetra processes drone video streams through a modular pipeline that separates
 detection, tracking, embedding, and temporal identity reasoning.
 
@@ -205,7 +221,7 @@ If you use Skynetra in research or projects, please consider citing it:
 
 MIT License — see [LICENSE](LICENSE) file.
 
-Thanks for reading!  
+Contributions, suggestions, and improvements are welcome.  
 If you're building drones, surveillance, edge AI, or just love modular CV pipelines — fork it, break it, improve it. Let's make something useful together. 🚀
 
 Harshit
