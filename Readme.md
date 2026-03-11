@@ -54,14 +54,14 @@ This architecture aggregates identity evidence across time, resulting in **stabl
 
 ## Key Features
 
-• Real-time ISTAR target identification  
-• Sparse detection + dense tracking pipeline  
-• Temporal identity memory via Hopfield networks  
-• Stable IDs with minimal flicker  
-• Modular architecture for rapid experimentation  
-• Edge-ready inference (ONNX / TensorRT)
+- Real-time ISTAR target identification  
+- Sparse detection + dense tracking pipeline  
+- Temporal identity memory via Hopfield networks  
+- Stable IDs with minimal flicker  
+- Modular architecture for rapid experimentation  
+- Edge-ready inference (ONNX / TensorRT)
 
-## Live Demo (8-second clip – Looping GIF)
+## Live Demo
 
 **Left**: Raw input video  
 **Right**: Skynetra output with YOLOv8 detection, ByteTrack tracking, MobileFaceNet embeddings, Hopfield temporal pooling, and **stable, persistent IDs** (no jumping around!)
