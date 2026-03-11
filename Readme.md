@@ -1,9 +1,12 @@
 # Skynetra
 
-![Python](https://img.shields.io/badge/python-3.10-blue)
+![Python](https://img.shields.io/badge/python-3.10+-blue)
 ![Framework](https://img.shields.io/badge/framework-PyTorch-red)
+![Computer Vision](https://img.shields.io/badge/domain-Computer%20Vision-purple)
+![Edge AI](https://img.shields.io/badge/deployment-Edge%20AI-orange)
+![Real-Time](https://img.shields.io/badge/performance-Real--Time-success)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-active-orange)
+![Status](https://img.shields.io/badge/status-Active%20Development-yellow)
 
 **Skynetra** is a real-time **target identification and tracking pipeline** designed for high-motion aerial video streams from **ISTAR drones and surveillance systems**.
 
