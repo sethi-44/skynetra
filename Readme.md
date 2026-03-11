@@ -73,10 +73,6 @@ This architecture aggregates identity evidence across time, resulting in **stabl
 
 ## System Architecture
 
-Drone Video Feed → Target Detection (YOLO) → Multi-Object Tracking (ByteTrack)  
-→ Target Embedding Extraction (MobileFaceNet) → Temporal Identity Memory (Hopfield Network)  
-→ Identity Recognition + Confidence Score → Operator Decision Support
-
 ```
 Drone Video Feed 
 ↓ 
@@ -210,6 +206,8 @@ Rendering overhead is **outside the core pipeline** and can be disabled for depl
 ## Citation
 
 If you use Skynetra in research or projects, please consider citing it:
+
+```bibtex
 @software{skynetra2026,
   author = {Harshit Sethi},
   title = {Skynetra: Real-time ISTAR Target Identification with Temporal Memory},
