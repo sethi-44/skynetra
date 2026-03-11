@@ -22,6 +22,8 @@ Real-time ISTAR target identification with temporal identity memory
   <a href="#performance-benchmarks">Benchmarks</a>
 </p>
 
+⭐ If you find this project useful, consider starring the repository!
+
 **Skynetra** is a real-time **target identification and tracking pipeline** designed for high-motion aerial video streams from **ISTAR drones and surveillance systems**.
 
 The system combines **sparse detection, multi-object tracking, deep feature embeddings, and temporal identity memory** to maintain **stable target identities in dynamic environments**.
