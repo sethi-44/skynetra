@@ -55,6 +55,15 @@ Instead of relying on single-frame predictions, the system integrates:
 
 This architecture aggregates identity evidence across time, resulting in **stable target recognition and reduced decision uncertainty**.
 
+## Design Principles
+
+Skynetra is designed around several key principles:
+
+- **Temporal reasoning over frame-by-frame predictions**
+- **Stable identity tracking** under motion and occlusion
+- **Modular architecture** enabling rapid experimentation
+- **Edge-friendly inference** for real-time deployment
+
 ## Key Features
 
 - Real-time ISTAR target identification  
@@ -63,6 +72,16 @@ This architecture aggregates identity evidence across time, resulting in **stabl
 - Stable IDs with minimal flicker  
 - Modular architecture for rapid experimentation  
 - Edge-ready inference (ONNX / TensorRT)
+
+## Use Cases
+
+Skynetra can be applied in several real-time perception systems:
+
+- ISTAR drone surveillance
+- Border monitoring systems
+- Smart city video analytics
+- Robotics perception pipelines
+- Edge AI camera systems
 
 ## Live Demo
 
@@ -199,11 +218,26 @@ Rendering overhead is **outside the core pipeline** and can be disabled for depl
 - Pipeline becomes **pixel-bound at 4K**, not algorithm-bound  
 - Real-time 4K achievable via detector downscaling or stronger GPUs
 
+## Limitations
+
+- Performance may degrade with extremely small or low-resolution targets
+- Long-term identity memory may drift if embeddings change significantly
+- Current implementation focuses on RGB video streams
+
 
 ## Planned Extensions
 
 - Multi-sensor fusion (e.g., IR + RGB gating mechanisms)
 - One-click modularity (easy config-based component swapping)
+
+## Acknowledgements
+
+Skynetra builds upon several excellent open-source and research projects:
+
+- YOLO object detection
+- ByteTrack multi-object tracking
+- MobileFaceNet embedding models
+- Modern Hopfield Networks
 
 ## Citation
 
@@ -217,11 +251,27 @@ If you use Skynetra in research or projects, please consider citing it:
   url = {https://github.com/sethi-44/skynetra}
 }
 ```
+
+## Contributing
+
+Contributions are welcome!
+
+Possible ways to contribute:
+
+- Implement new detection models
+- Add new tracking algorithms
+- Improve temporal memory mechanisms
+- Optimize inference for edge hardware
+- Improve documentation
+
+Feel free to open an issue or submit a pull request.
+
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) file.
 
-Contributions, suggestions, and improvements are welcome.  
+Thanks for Reading!  
 If you're building drones, surveillance, edge AI, or just love modular CV pipelines — fork it, break it, improve it. Let's make something useful together. 🚀
 
 Harshit
