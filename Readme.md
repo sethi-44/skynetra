@@ -59,19 +59,9 @@ This architecture aggregates identity evidence across time, resulting in **stabl
 
 ## System Architecture
 
-Drone Video Feed
-↓
-Target Detection (YOLO)
-↓
-Multi-Object Tracking (ByteTrack)
-↓
-Target Embedding Extraction (MobileFaceNet)
-↓
-Temporal Memory Refinement (Hopfield Network)
-↓
-Identity Recognition + Confidence Score
-↓
-Operator Decision Support
+Drone Video Feed → Target Detection (YOLO) → Multi-Object Tracking (ByteTrack)  
+→ Target Embedding Extraction (MobileFaceNet) → Temporal Identity Memory (Hopfield Network)  
+→ Identity Recognition + Confidence Score → Operator Decision Support
 
 Skynetra processes drone video streams through a modular pipeline that separates
 detection, tracking, embedding, and temporal identity reasoning.
