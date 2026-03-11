@@ -1,16 +1,82 @@
-# Skynetra 
+# Skynetra
 
-**Skynetra** is a **modular, real-time face detection, tracking, and identification pipeline** built for video streams — especially aerial, drone, and edge scenarios.
+![Python](https://img.shields.io/badge/python-3.10-blue)
+![Framework](https://img.shields.io/badge/framework-PyTorch-red)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-active-orange)
 
-It combines modern deep-learning tools with **stateful, event-driven design** to achieve:
-- Extremely stable IDs (almost no flickering)
-- Very low latency
-- Full modularity for easy experimentation and deployment
+**Skynetra** is a real-time **target identification and tracking pipeline** designed for high-motion aerial video streams from **ISTAR drones and surveillance systems**.
 
-Hello nerds!!  
-Yeah — I know what you're thinking:  
-"What the heck is this Skynetra thing??"  
-But before I explain anything, let's just get it working — because the proof is in the pudding.
+The system combines **sparse detection, multi-object tracking, deep feature embeddings, and temporal identity memory** to maintain **stable target identities in dynamic environments**.
+
+## Problem
+
+Modern ISTAR drone operations increasingly rely on AI-assisted target identification.
+However, many current systems operate purely on **frame-by-frame predictions**, which introduces critical risks.
+
+Key challenges include:
+
+* **Identity flickering** under rapid motion
+* **Lost tracking** during occlusions
+* **Overconfidence in incorrect predictions**
+* **Automation bias**, where human operators over-trust AI outputs
+
+In high-stakes environments, these failures can lead to **incorrect situational awareness and dangerous decisions**.
+
+## Solution
+
+Skynetra addresses these issues through a **temporal, tracking-aware identification pipeline**.
+
+Instead of relying on single-frame predictions, the system integrates:
+
+• **YOLO-based target detection**
+• **ByteTrack multi-object tracking**
+• **Deep feature embeddings (MobileFaceNet)**
+• **Hopfield-based temporal memory**
+
+This architecture aggregates identity evidence across time, resulting in **stable target recognition and reduced decision uncertainty**.
+
+## Key Features
+
+• Real-time ISTAR target identification  
+• Sparse detection + dense tracking pipeline  
+• Temporal identity memory via Hopfield networks  
+• Stable IDs with minimal flicker  
+• Modular architecture for rapid experimentation  
+• Edge-ready inference (ONNX / TensorRT)
+
+## Live Demo (8-second clip – Looping GIF)
+
+**Left**: Raw input video  
+**Right**: Skynetra output with YOLOv8-Face detection, ByteTrack tracking, MobileFaceNet embeddings, Hopfield temporal pooling, and **stable, persistent IDs** (no jumping around!)
+
+![Skynetra Demo - Raw vs Processed](assets/534364962-58ce3822-ab77-498d-81e7-2b18abda928a.gif)
+
+(Looping 8-second Full HD clip processed in real-time. Watch how IDs stay consistent across frames.)
+
+## System Architecture
+
+Drone Video Feed
+↓
+Target Detection (YOLO)
+↓
+Multi-Object Tracking (ByteTrack)
+↓
+Target Embedding Extraction (MobileFaceNet)
+↓
+Identity Memory Refinement (Hopfield Network)
+↓
+Identity Recognition + Confidence Score
+↓
+Operator Decision Support
+
+Skynetra processes drone video streams through a modular pipeline that separates
+detection, tracking, embedding, and temporal identity reasoning.
+
+The Hopfield-based temporal memory aggregates identity evidence across
+multiple frames, allowing the system to maintain stable target identities
+even under rapid motion, occlusion, or noisy observations.
+
 
 ## Quick Start
 
@@ -26,15 +92,6 @@ python main.py
 ```
 
 That's literally it. No complicated setup. Just run and watch.
-
-## Live Demo (8-second clip – Looping GIF)
-
-**Left**: Raw input video  
-**Right**: Skynetra output with YOLOv8-Face detection, ByteTrack tracking, MobileFaceNet embeddings, Hopfield temporal pooling, and **stable, persistent IDs** (no jumping around!)
-
-![Skynetra Demo - Raw vs Processed](assets/534364962-58ce3822-ab77-498d-81e7-2b18abda928a.gif)
-
-(Looping 8-second Full HD clip processed in real-time. Watch how IDs stay consistent across frames.)
 
 ## Current Capabilities
 
@@ -75,7 +132,7 @@ High-motion, crowded real-world videos
 - **FPS** = total frames processed / total runtime  
 - Latencies are **per-frame averages** across full runs  
 - Tracker cost remains nearly constant across resolutions  
-- Embedding cost scales mainly with **number of faces**, not pixels  
+- Embedding cost scales mainly with **number of tracked targets**, not pixels  
 
 ---
 
