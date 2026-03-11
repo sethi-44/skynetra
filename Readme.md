@@ -32,10 +32,10 @@ Skynetra addresses these issues through a **temporal, tracking-aware identificat
 
 Instead of relying on single-frame predictions, the system integrates:
 
-• **YOLO-based target detection**
-• **ByteTrack multi-object tracking**
-• **Deep feature embeddings (MobileFaceNet)**
-• **Hopfield-based temporal memory**
+- **YOLO-based target detection**
+- **ByteTrack multi-object tracking**
+- **Deep feature embeddings (MobileFaceNet)**
+- **Hopfield-based temporal memory**
 
 This architecture aggregates identity evidence across time, resulting in **stable target recognition and reduced decision uncertainty**.
 
