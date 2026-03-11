@@ -106,25 +106,18 @@ trackers, and embedding models can be easily swapped or extended.
 
 skynetra/
 │
-├── assets/               # Demo videos, GIFs, and visual resources
+├── assets/ # Demo videos, GIFs, and visual resources
+├── detectors/ # Target / face detection modules (YOLO models)
+├── trackers/ # Multi-object tracking implementations (ByteTrack)
+├── models/ # Embedding models (MobileFaceNet, TensorRT versions)
+├── utils/ # Helper utilities (preprocessing, visualization, etc.)
 │
-├── detectors/            # Target / face detection modules (YOLO models)
+├── add_info.py # Script to add known identities to persistent storage
+├── main.py # Entry point for running the full pipeline
+├── requirements.txt
 │
-├── trackers/             # Multi-object tracking implementations (ByteTrack)
-│
-├── models/               # Embedding models (MobileFaceNet, TensorRT versions)
-│
-├── utils/                # Helper utilities (preprocessing, visualization, etc.)
-│
-├── add_info.py           # Script to add known identities to persistent storage
-│
-├── main.py               # Entry point for running the full pipeline
-│
-├── requirements.txt      # Python dependencies
-│
-├── LICENSE               # MIT license
-│
-└── README.md             # Project documentation
+├── LICENSE
+└── README.md
 
 ## System Features
 
