@@ -104,6 +104,7 @@ That's literally it. No complicated setup. Just run and watch.
 The repository is organized into modular components so that detectors,
 trackers, and embedding models can be easily swapped or extended.
 
+```
 skynetra/
 │
 ├── assets/ # Demo videos, GIFs, and visual resources
@@ -118,6 +119,7 @@ skynetra/
 │
 ├── LICENSE
 └── README.md
+```
 
 ## System Features
 
