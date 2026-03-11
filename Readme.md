@@ -1,12 +1,18 @@
-# Skynetra
+<h1 align="center">Skynetra</h1>
 
-![Python](https://img.shields.io/badge/python-3.10+-blue)
-![Framework](https://img.shields.io/badge/framework-PyTorch-red)
-![Computer Vision](https://img.shields.io/badge/domain-Computer%20Vision-purple)
-![Edge AI](https://img.shields.io/badge/deployment-Edge%20AI-orange)
-![Real-Time](https://img.shields.io/badge/performance-Real--Time-success)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-Active%20Development-yellow)
+<p align="center">
+Real-time ISTAR target identification with temporal identity memory
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10+-blue">
+  <img src="https://img.shields.io/badge/framework-PyTorch-red">
+  <img src="https://img.shields.io/badge/domain-Computer%20Vision-purple">
+  <img src="https://img.shields.io/badge/deployment-Edge%20AI-orange">
+  <img src="https://img.shields.io/badge/performance-Real--Time-success">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/status-Active%20Development-yellow">
+</p>
 
 **Skynetra** is a real-time **target identification and tracking pipeline** designed for high-motion aerial video streams from **ISTAR drones and surveillance systems**.
 
@@ -149,13 +155,6 @@ Rendering overhead is **outside the core pipeline** and can be disabled for depl
 - Pipeline becomes **pixel-bound at 4K**, not algorithm-bound  
 - Real-time 4K achievable via detector downscaling or stronger GPUs
 
-
-## Why Skynetra?
-
-This isn't just another face-recognition script you see in phones or basic demos.  
-It has **actual temporal memory** via the Hopfield layer — reducing **[automation bias](https://en.wikipedia.org/wiki/Automation_bias)** through robust, event-based identification that mimics how humans remember and associate faces over time.
-
-Built for **real-world deployment** — drones, border surveillance, robotics, edge cameras — where flickering IDs, high latency, or fragile persistence destroy usability.
 
 ## Planned Extensions
 
