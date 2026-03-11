@@ -99,6 +99,33 @@ python main.py
 
 That's literally it. No complicated setup. Just run and watch.
 
+## Project Structure
+
+The repository is organized into modular components so that detectors,
+trackers, and embedding models can be easily swapped or extended.
+
+skynetra/
+│
+├── assets/               # Demo videos, GIFs, and visual resources
+│
+├── detectors/            # Target / face detection modules (YOLO models)
+│
+├── trackers/             # Multi-object tracking implementations (ByteTrack)
+│
+├── models/               # Embedding models (MobileFaceNet, TensorRT versions)
+│
+├── utils/                # Helper utilities (preprocessing, visualization, etc.)
+│
+├── add_info.py           # Script to add known identities to persistent storage
+│
+├── main.py               # Entry point for running the full pipeline
+│
+├── requirements.txt      # Python dependencies
+│
+├── LICENSE               # MIT license
+│
+└── README.md             # Project documentation
+
 ## System Features
 
 - Real-time processing — **~120 FPS raw** on 720p (no rendering/visualization overhead)
