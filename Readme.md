@@ -214,7 +214,7 @@ If you use Skynetra in research or projects, please consider citing it:
   year = {2026},
   url = {https://github.com/sethi-44/skynetra}
 }
-
+```
 ## License
 
 MIT License — see [LICENSE](LICENSE) file.
