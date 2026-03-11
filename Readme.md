@@ -18,6 +18,7 @@ Real-time ISTAR target identification with temporal identity memory
   <a href="#quick-start">Quick Start</a> •
   <a href="#system-architecture">Architecture</a> •
   <a href="#live-demo">Demo</a> •
+  <a href="#key-features">Features</a> •
   <a href="#performance-benchmarks">Benchmarks</a>
 </p>
 
@@ -127,7 +128,7 @@ skynetra/
 - **Persistent identity storage** — JSON metadata + tensor files via `add_info.py` — auto-loads known targets on startup
 - **Modern Hopfield layer** — temporal embedding pooling inspired by [Modern Hopfield Networks (Ramsauer et al., 2021)](https://arxiv.org/abs/2008.02217), acting like associative human memory
 - **Smart frame sampling** with tracker feedback
-- **Asynchronous GPU detection** — sparse YOLOv8-Face + dense ByteTrack
+- **Asynchronous GPU detection** — sparse YOLOv8 + dense ByteTrack
 - **Fully modular** — swap detector, tracker, embedder, pooling, etc. without touching core logic
 - **TensorRT compilation** support
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
@@ -136,7 +137,7 @@ skynetra/
 ## Performance Benchmarks
 
 **Pipeline**  
-YOLOv8-Face + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
+YOLOv8 + ByteTrack + MobileFaceNet (TensorRT FP16) + Hopfield temporal pooling
 
 **Mode**  
 Raw pipeline (no visualization unless stated)
@@ -189,6 +190,16 @@ Rendering overhead is **outside the core pipeline** and can be disabled for depl
 
 - Multi-sensor fusion (e.g., IR + RGB gating mechanisms)
 - One-click modularity (easy config-based component swapping)
+
+## Citation
+
+If you use Skynetra in research or projects, please consider citing it:
+@software{skynetra2026,
+  author = {Harshit Sethi},
+  title = {Skynetra: Real-time ISTAR Target Identification with Temporal Memory},
+  year = {2026},
+  url = {https://github.com/sethi-44/skynetra}
+}
 
 ## License
 
