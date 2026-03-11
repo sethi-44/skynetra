@@ -7,8 +7,6 @@
 ![Real-Time](https://img.shields.io/badge/performance-Real--Time-success)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-Active%20Development-yellow)
-![GitHub stars](https://img.shields.io/github/stars/<username>/skynetra)
-![GitHub issues](https://img.shields.io/github/issues/<username>/skynetra)
 
 **Skynetra** is a real-time **target identification and tracking pipeline** designed for high-motion aerial video streams from **ISTAR drones and surveillance systems**.
 
