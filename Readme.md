@@ -97,7 +97,7 @@ Skynetra can be applied in several real-time perception systems:
 
 Skynetra tracking multiple identities in a crowded environment.
 
-[![Crowd Demo](assets/skynetra_tracking.gif)]((https://drive.google.com/file/d/1p2wnVaJ-YJE4rmfFRZMhHl9iwVDHkRvJ/view?usp=sharing))
+[![Crowd Demo](assets/skynetra_tracking.gif)](https://drive.google.com/file/d/1p2wnVaJ-YJE4rmfFRZMhHl9iwVDHkRvJ/view?usp=sharing)
 
 *Click the GIF to watch the full video.*
 
