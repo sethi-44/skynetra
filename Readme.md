@@ -93,6 +93,16 @@ Skynetra can be applied in several real-time perception systems:
 
 (Looping 8-second Full HD clip processed in real-time. Watch how IDs stay consistent across frames.)
 
+## Crowd Scene Demo
+
+Skynetra tracking multiple identities in a crowded environment.
+
+[![Crowd Demo](assets/skynetra_tracking.gif)](assets/skynetra_tracking.mp4)
+
+*Click the GIF to watch the full video.*
+
+Notice how identities remain stable even during motion and occlusion.
+
 ## System Architecture
 
 ```
