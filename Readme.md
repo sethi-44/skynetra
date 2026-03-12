@@ -38,7 +38,8 @@ Key challenges include:
 * **Identity flickering** under rapid motion
 * **Lost tracking** during occlusions
 * **Overconfidence in incorrect predictions**
-* **Automation bias**, where human operators over-trust AI outputs
+* **Automation bias** — when human operators over-trust machine outputs and rely on them without sufficient verification.  
+  ([More info](https://en.wikipedia.org/wiki/Automation_bias))
 
 In high-stakes environments, these failures can lead to **incorrect situational awareness and dangerous decisions**.
 
