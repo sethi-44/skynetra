@@ -60,7 +60,7 @@ This architecture aggregates identity evidence across time, resulting in **stabl
 
 Skynetra is designed around several key principles:
 
-- **Temporal reasoning over frame-by-frame predictions**
+- **Temporal reasoning over frame-by-frame predictions** — identities persist across frames, so aggregating evidence across time improves stability.
 - **Stable identity tracking** under motion and occlusion
 - **Modular architecture** enabling rapid experimentation
 - **Edge-friendly inference** for real-time deployment
