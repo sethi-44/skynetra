@@ -107,6 +107,8 @@ Notice how identities remain stable even during motion and occlusion.
 
 ```
 Drone Video Feed 
+↓
+Frame Sampler (Sparse Detection Scheduling)
 ↓ 
 Target Detection (YOLO) 
 ↓ 
@@ -124,25 +126,63 @@ Operator Decision Support
 Skynetra processes drone video streams through a modular pipeline that separates
 detection, tracking, embedding, and temporal identity reasoning.
 
+A frame sampler schedules sparse detection, allowing the system to run the detector only on selected frames while the tracker maintains object trajectories between detections. This significantly improves real-time performance while preserving stable identities.
+
 The Hopfield-based temporal memory aggregates identity evidence across
 multiple frames, allowing the system to maintain stable target identities
 even under rapid motion, occlusion, or noisy observations.
 
+## Installation
 
-## Quick Start
+Skynetra uses **TensorRT-optimized models** to achieve high-performance real-time inference.  
+Because of this, the setup requires an **NVIDIA GPU environment with CUDA and TensorRT**.
+
+Installing TensorRT can vary depending on your GPU, CUDA version, and operating system, so please ensure the versions are compatible.
+
+### Requirements
+
+- Python **3.9+**
+- **NVIDIA GPU**
+- **CUDA**
+- **TensorRT**
+- **PyTorch**
+- **OpenCV**
+
+### Install Python Dependencies
+
+First install the Python packages required by the project:
 
 ```bash
-# 1. Install dependencies
 pip install -r requirements.txt
+```
+###Install TensorRT
 
-# 2. (Optional) Add known identities to persistent storage
+Skynetra relies on TensorRT engines for accelerated inference.
+You must install TensorRT compatible with your CUDA version and GPU architecture.
+
+Follow the official NVIDIA installation guide:
+
+https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
+
+##Quick Start
+
+Once the environment is correctly configured, running the pipeline is straightforward.
+
+```bash
+# (Optional) Add known identities to persistent storage
 python add_info.py
 
-# 3. Run the pipeline on a video
+# Run the pipeline on a video
 python main.py
 ```
 
-That's literally it. No complicated setup. Just run and watch.
+This will start the Skynetra pipeline and process the input video stream using the configured detection, tracking, embedding, and temporal identity memory modules.
+
+###Note
+
+The current implementation runs only on NVIDIA GPUs using TensorRT for optimal performance.
+
+Support for additional inference backends (such as PyTorch-only execution or other hardware accelerators) is planned for future releases to improve portability and ease of setup.
 
 ## Project Structure
 
@@ -152,14 +192,14 @@ trackers, and embedding models can be easily swapped or extended.
 ```
 skynetra/
 │
-├── assets/ # Demo videos, GIFs, and visual resources
-├── detectors/ # Target / face detection modules (YOLO models)
-├── trackers/ # Multi-object tracking implementations (ByteTrack)
-├── models/ # Embedding models (MobileFaceNet, TensorRT versions)
-├── utils/ # Helper utilities (preprocessing, visualization, etc.)
+├── assets/  # Demo videos, GIFs, and visual resources
+├── detectors/   # Target / face detection modules (YOLO models)
+├── trackers/  # Multi-object tracking implementations (ByteTrack)
+├── models/  # Embedding models (MobileFaceNet, TensorRT versions)
+├── utils/   # Helper utilities (preprocessing, visualization, etc.)
 │
-├── add_info.py # Script to add known identities to persistent storage
-├── main.py # Entry point for running the full pipeline
+├── add_info.py  # Script to add known identities to persistent storage
+├── main.py  # Entry point for running the full pipeline
 ├── requirements.txt
 │
 ├── LICENSE
@@ -172,7 +212,6 @@ skynetra/
 - **Persistent identity storage** — JSON metadata + tensor files via `add_info.py` — auto-loads known targets on startup
 - **Modern Hopfield layer** — temporal embedding pooling inspired by [Modern Hopfield Networks (Ramsauer et al., 2021)](https://arxiv.org/abs/2008.02217), acting like associative human memory
 - **Smart frame sampling** with tracker feedback
-- **Asynchronous GPU detection** — sparse YOLOv8 + dense ByteTrack
 - **Fully modular** — swap detector, tracker, embedder, pooling, etc. without touching core logic
 - **TensorRT compilation** support
 - **MobileFaceNet ONNX** embedding (huge speedup over original FaceNet)
@@ -240,6 +279,7 @@ Rendering overhead is **outside the core pipeline** and can be disabled for depl
 
 - Multi-sensor fusion (e.g., IR + RGB gating mechanisms)
 - One-click modularity (easy config-based component swapping)
+- **Asynchronous GPU detection** — sparse YOLOv8 + dense ByteTrack
 
 ## Acknowledgements
 
