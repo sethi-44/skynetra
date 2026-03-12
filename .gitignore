@@ -3,6 +3,7 @@ __pycache__/
 .env
 skynetra-env/
 *.pt
+*.trt
 *.pth
 runs/
 data/

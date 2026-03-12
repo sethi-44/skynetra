@@ -164,6 +164,23 @@ Follow the official NVIDIA installation guide:
 
 https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
 
+### Compile TensorRT Engine
+
+Before running Skynetra, the ONNX model must be converted into a TensorRT engine.
+
+You can compile the engine using NVIDIA's `trtexec` tool:
+
+```bash
+trtexec \
+--onnx=models/MobileFaceNet.onnx \
+--saveEngine=models/mobilefacenet_fp16.trt \
+--fp16
+```
+
+This will generate the TensorRT engine optimized for your GPU.
+
+Note: TensorRT engines are hardware-specific and may need to be rebuilt when running on a different GPU or TensorRT version.
+
 ## Quick Start
 
 Once the environment is correctly configured, running the pipeline is straightforward.
