@@ -155,7 +155,7 @@ First install the Python packages required by the project:
 ```bash
 pip install -r requirements.txt
 ```
-###Install TensorRT
+### Install TensorRT
 
 Skynetra relies on TensorRT engines for accelerated inference.
 You must install TensorRT compatible with your CUDA version and GPU architecture.
@@ -164,7 +164,7 @@ Follow the official NVIDIA installation guide:
 
 https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
 
-##Quick Start
+## Quick Start
 
 Once the environment is correctly configured, running the pipeline is straightforward.
 
@@ -178,7 +178,7 @@ python main.py
 
 This will start the Skynetra pipeline and process the input video stream using the configured detection, tracking, embedding, and temporal identity memory modules.
 
-###Note
+### Note
 
 The current implementation runs only on NVIDIA GPUs using TensorRT for optimal performance.
 
