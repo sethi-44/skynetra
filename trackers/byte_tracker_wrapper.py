@@ -1,12 +1,10 @@
-from ultralytics.trackers.byte_tracker import BYTETracker
+from trackers.byte_tracker import BYTETracker
 
-class TrackerConfig:
-    track_high_thresh = 0.55
-    track_low_thresh = 0.1
-    new_track_thresh = 0.7
-    track_buffer = 30
-    match_thresh = 0.7
-    fuse_score=False
+class ByteTrackConfig:
+    track_thresh = 0.35
+    track_buffer = 45
+    match_thresh = 0.75
+    mot20 = False
 
 def create_tracker():
-    return BYTETracker(TrackerConfig(), frame_rate=30)
+    return BYTETracker(ByteTrackConfig(), frame_rate=30)

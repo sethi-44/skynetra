@@ -2,6 +2,30 @@ import torch
 import torch.nn.functional as F
 from utils.hopfield_layer import HopfieldLayer
 
+class EmbeddingBuffer:
+    def __init__(self, max_len, dim, device):
+        self.emb = torch.empty((max_len, dim), device=device)
+        self.max_len = max_len
+        self.ptr = 0
+        self.count = 0
+
+    def add(self, emb):
+        self.emb[self.ptr] = emb
+        self.ptr = (self.ptr + 1) % self.max_len
+        self.count = min(self.count + 1, self.max_len)
+
+    def full(self):
+        return self.count >= self.max_len
+    
+    def get_all(self):
+        if self.count < self.max_len:
+            return self.emb[:self.count]
+        idx = torch.arange(
+            self.ptr, self.ptr + self.max_len, device=self.emb.device
+        ) % self.max_len
+        return self.emb[idx]
+
+
 
 def pool_embeddings(buf, device):
     """
@@ -41,8 +65,8 @@ def identify_person(
     gallery,
     id_names,
     delta,
-    threshold=0.7,
-    delta_threshold=0.2,
+    threshold=0.95,
+    delta_threshold=0.8,
 ):
     """
     GPU-safe cosine similarity identity matching.

@@ -4,6 +4,7 @@ __pycache__/
 skynetra-env/
 *.pt
 *.trt
+*.engine
 *.pth
 runs/
 data/
