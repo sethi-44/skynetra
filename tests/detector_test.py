@@ -1,8 +1,8 @@
 import cv2
 import time
-from detectors.yolo_face_detector import FaceDetectorTRT
+from detectors.yolo_face_detector import FaceDetector
 
-detector = FaceDetectorTRT(model_path=r"C:\Users\harsh\OneDrive\Desktop\skynetra\models\yolov9t-face-lindevs", device='cuda')
+detector = FaceDetector(model_path=r"C:\Users\harsh\OneDrive\Desktop\skynetra\models\yolov9t-face-lindevs", device='cuda')
 
 cap = cv2.VideoCapture(0)  # webcam, change to video path if needed
 

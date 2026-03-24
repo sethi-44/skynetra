@@ -1,13 +1,15 @@
 """
-Face Quality Assessment Module (Rewritten)
------------------------------------------
-Produces a continuous quality score (0–1) instead of hard rejection.
-Designed for video-based face recognition pipelines.
+Face Quality Assessment Module (Explainable Version)
+--------------------------------------------------
+Adds:
+- Weight justification
+- Reason generation
+- Reliability levels
+- Continuous temporal scoring
 """
 
 import cv2
 import numpy as np
-import torch
 
 
 # ------------------------------------------------------------
@@ -18,7 +20,7 @@ class FaceQualityChecker:
         self,
         min_face_size=80,
         max_face_size=800,
-        blur_norm_thresh=0.0015,          # normalized Laplacian variance
+        blur_norm_thresh=0.0015,
         brightness_range=(40, 220),
         aspect_ratio_range=(0.6, 1.4),
         min_edge_distance=20,
@@ -30,8 +32,32 @@ class FaceQualityChecker:
         self.aspect_ratio_range = aspect_ratio_range
         self.min_edge_distance = min_edge_distance
 
+        # ----------------------------
+        # Weight configuration
+        # ----------------------------
+        self.weights = {
+            "blur": 0.25,
+            "brightness": 0.20,
+            "size": 0.20,
+            "aspect": 0.15,
+            "edge": 0.10,
+            "occlusion": 0.10
+        }
+
+        # ----------------------------
+        # Weight justification (EXPLAINABILITY)
+        # ----------------------------
+        self.weight_reasoning = {
+            "blur": "Sharpness is critical for extracting facial features",
+            "brightness": "Lighting affects visibility and contrast",
+            "size": "Sufficient face resolution is required for recognition",
+            "aspect": "Distorted face shapes reduce embedding quality",
+            "edge": "Faces near borders are often incomplete",
+            "occlusion": "Obstructions hide key identity features"
+        }
+
     # ----------------------------
-    # Individual metrics (0–1)
+    # Individual metrics
     # ----------------------------
     def blur_score(self, gray, w, h):
         lap = cv2.Laplacian(gray, cv2.CV_64F).var()
@@ -70,16 +96,96 @@ class FaceQualityChecker:
             return 1.0
         return max(0.0, d / self.min_edge_distance)
 
-    def occlusion_score(self, gray):
-        edges = cv2.Canny(gray, 50, 150)
-        ratio = np.count_nonzero(edges) / gray.size
+    # def occlusion_score(self, gray):
+    #     edges = cv2.Canny(gray, 50, 150)
+    #     ratio = np.count_nonzero(edges) / gray.size
 
-        # Ideal range ~0.05–0.30, soft penalty outside
-        if ratio < 0.05:
-            return ratio / 0.05
-        if ratio > 0.30:
-            return max(0.0, 1.0 - (ratio - 0.30) / 0.20)
-        return 1.0
+    #     if ratio < 0.05:
+    #         return ratio / 0.05
+    #     if ratio > 0.30:
+    #         return max(0.0, 1.0 - (ratio - 0.30) / 0.20)
+    #     return 1.0
+    def occlusion_score(self, gray: np.ndarray) -> float:
+        """
+        Region-based occlusion score using pixel intensity variance.
+
+        Divides the face into 4 horizontal zones and measures std-dev
+        per zone. A uniform/flat patch (low std-dev) indicates occlusion
+        (mask, hand, sunglasses, etc.). Zones are weighted by their
+        importance to identity recognition.
+
+        Returns:
+            float in [0.0, 1.0] where 1.0 = fully visible, 0.0 = occluded
+        """
+        h, w = gray.shape
+
+        zones = {
+            # (y_start_frac, y_end_frac): weight
+            "forehead":   ((0.00, 0.25), 0.15),
+            "eyes":       ((0.25, 0.50), 0.35),
+            "nose_mouth": ((0.50, 0.75), 0.35),
+            "chin":       ((0.75, 1.00), 0.15),
+        }
+
+        # Minimum std-dev that counts as "textured / visible"
+        # Empirically: plain skin ~12-18, occluded ~2-6, open face ~20-40
+        TEXTURE_THRESHOLD = 15.0
+
+        total_score = 0.0
+
+        for (y0_frac, y1_frac), weight in zones.values():
+            y0 = int(h * y0_frac)
+            y1 = int(h * y1_frac)
+            zone = gray[y0:y1, :]
+
+            if zone.size == 0:
+                # Degenerate crop — treat as invisible
+                continue
+
+            std = float(np.std(zone))
+            zone_score = float(np.clip(std / TEXTURE_THRESHOLD, 0.0, 1.0))
+            total_score += weight * zone_score
+
+        return float(np.clip(total_score, 0.0, 1.0))
+
+    # ----------------------------
+    # Reliability level
+    # ----------------------------
+    def reliability_level(self, q):
+        if q > 0.8:
+            return "HIGH"
+        elif q > 0.6:
+            return "MEDIUM"
+        return "LOW"
+
+    # ----------------------------
+    # Reason generator
+    # ----------------------------
+    def generate_reasons(self, scores):
+        reasons = []
+
+        if scores["blur"] < 0.5:
+            reasons.append("Image is blurry")
+
+        if scores["brightness"] < 0.5:
+            reasons.append("Poor lighting conditions")
+
+        if scores["size"] < 0.5:
+            reasons.append("Face resolution too small")
+
+        if scores["aspect"] < 0.5:
+            reasons.append("Face angle or distortion detected")
+
+        if scores["edge"] < 0.5:
+            reasons.append("Face too close to frame boundary")
+
+        if scores["occlusion"] < 0.5:
+            reasons.append("Face partially occluded")
+
+        if not reasons:
+            reasons.append("Good quality face")
+
+        return reasons
 
     # ----------------------------
     # Main assessment
@@ -100,19 +206,17 @@ class FaceQualityChecker:
             "occlusion": self.occlusion_score(gray),
         }
 
-        # Weighted aggregation (sums to 1.0)
-        quality = (
-            0.25 * scores["blur"] +
-            0.20 * scores["brightness"] +
-            0.20 * scores["size"] +
-            0.15 * scores["aspect"] +
-            0.10 * scores["edge"] +
-            0.10 * scores["occlusion"]
-        )
+        # Weighted aggregation
+        quality = sum(self.weights[k] * scores[k] for k in scores)
+
+        quality = float(np.clip(quality, 0.0, 1.0))
 
         return {
-            "quality": float(np.clip(quality, 0.0, 1.0)),
-            "scores": scores
+            "quality": quality,
+            "level": self.reliability_level(quality),
+            "scores": scores,
+            "reasons": self.generate_reasons(scores),
+            "weight_justification": self.weight_reasoning
         }
 
     # ----------------------------
@@ -153,13 +257,13 @@ class FaceQualityChecker:
 
 
 # ------------------------------------------------------------
-# Temporal Quality Consistency
+# Temporal Consistency Checker (Improved)
 # ------------------------------------------------------------
 class TemporalConsistencyChecker:
     def __init__(self, memory=10, threshold=0.65):
         self.memory = memory
         self.threshold = threshold
-        self.history = {}  # tid → [quality]
+        self.history = {}
 
     def update(self, tid, quality):
         buf = self.history.setdefault(tid, [])
@@ -168,10 +272,16 @@ class TemporalConsistencyChecker:
         if len(buf) > self.memory:
             buf.pop(0)
 
-        if len(buf) < 3:
-            return False
+        if len(buf) == 0:
+            return {"temporal_score": 0.0, "stable": False, "level": "LOW"}
 
-        return np.mean(buf) >= self.threshold
+        score = float(np.mean(buf))
+
+        return {
+            "temporal_score": score,
+            "stable": score >= self.threshold,
+            "level": "HIGH" if score > 0.8 else "MEDIUM" if score > 0.6 else "LOW"
+        }
 
     def cleanup(self, active_ids):
         self.history = {

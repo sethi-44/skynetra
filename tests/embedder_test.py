@@ -3,7 +3,7 @@ import os
 import torch
 
 from detectors.yolo_face_detector import FaceDetector
-from utils.trt_mobilefacenet import TRTMobileFaceNet
+from embedder.embedder import TRTMobileFaceNet
 from utils.face_utils import safe_crop_np
 
 IMAGE_DIR = r"C:\Users\harsh\OneDrive\Desktop\skynetra\tests\images"
