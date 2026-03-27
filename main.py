@@ -12,9 +12,13 @@ Usage
     python main.py
     SKYNETRA_MODELS=/data/models python main.py
 """
-# from flask import Flask, jsonify
-# from flask_cors import CORS
-# import threading
+from time import time
+
+from flask import Flask, jsonify,Response
+from flask_cors import CORS
+# from flask import render_template
+import threading
+import cv2
 
 import os
 import sys
@@ -34,19 +38,23 @@ from utils.main_helpers import (
     IdentityVoter,
 )
 
-# latest_state = {
-#     "tracks": [],
-#     "S": 0,
-#     "gallery": [],
-#     "frame": 0
-# }
+latest_frame = {"frame": None}
 
-# app = Flask(__name__)
-# CORS(app)
+latest_state = {
+    "tracks": [],
+    "frame": 0
+}
 
-# @app.route("/state")
-# def get_state():
-#     return jsonify(latest_state)
+app = Flask(__name__)
+CORS(app)
+
+# @app.route("/")
+# def index():
+#     return render_template("index.html")
+
+@app.route("/state")
+def get_state():
+    return jsonify(latest_state)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -63,7 +71,29 @@ IDENTITIES_PATH = "identities"
 EMB_DIM     = 256   # MobileFaceNet output dimension
 MIN_SAMPLES = 10    # face crops required before re-ID fires (EmbeddingBuffer depth)
 
+import time
 
+def generate_frames():
+    while True:
+        frame = latest_frame["frame"]
+
+        if frame is None:
+            time.sleep(0.01)   # 🔥 CRITICAL FIX
+            continue
+
+        ret, buffer = cv2.imencode('.jpg', frame)
+        if not ret:
+            continue
+
+        frame_bytes = buffer.tobytes()
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+@app.route('/video')
+def video():
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 # ---------------------------------------------------------------------------
 # Startup validation
 # ---------------------------------------------------------------------------
@@ -128,6 +158,10 @@ def main() -> None:
     track_info             = {}   # tid → display info dict
 
     print("\n[i] SkyNetra running  (press ESC to quit)\n")
+    def run_api():
+        app.run(host="0.0.0.0", port=5000)
+
+    threading.Thread(target=run_api, daemon=True).start()
 
     # Bug fix: wrap main loop in try/finally so cleanup() always runs even if
     # process_frame raises an uncaught exception (CUDA OOM, shape error, etc.).
@@ -145,6 +179,8 @@ def main() -> None:
                 identity_memory, identity_memory_pooled, identity_voters, track_info,
                 id_names, gallery, hop,
                 device, EMB_DIM, MIN_SAMPLES, video_writer,
+                latest_state,  # for API
+                latest_frame   # for API
             ):
                 break
     except KeyboardInterrupt:

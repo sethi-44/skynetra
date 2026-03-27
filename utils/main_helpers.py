@@ -8,13 +8,15 @@ from utils.identities.store import IdentityStore
 from utils.hopfield_layer import HopfieldLayer
 from embedder.embedder import MobileFaceNet
 from trackers.matching import ious
-from utils.face_utils import safe_crop_np
+from utils.face_utils import safe_crop_np,preprocess_face_for_embedder
 from utils.visualize import draw_tracks
-from utils.embedding_ops import EmbeddingBuffer, identify_person, refine_identity, pool_embeddings
+from utils.embedding_ops import EmbeddingBuffer, identify_person, refine_identity, pool_embeddings,identify_person_cosine
 from utils.quality_checker import FaceQualityChecker, TemporalConsistencyChecker
 from sampler.sampling import FrameSampler
 
 import numpy as np
+
+sent_faces = {} 
 
 def to_numpy(x, dtype=np.float64):
     """
@@ -224,6 +226,8 @@ def process_frame(
     emb_dim: int,
     min_samples: int,
     video_writer: Optional[cv2.VideoWriter],
+    latest_state: dict,  # for API
+    latest_frame: dict,  # for API
 ) -> bool:
     ret, frame = cap.read()
     if not ret:
@@ -326,15 +330,18 @@ def process_frame(
                 "warning": "poor input quality",
             }
             continue
-
+        
+        # cv2.imshow(f"face_{t.track_id}", face)
         faces.append(embedder.preprocess_face(face))
         tids.append(t.track_id)
 
     # ── Embedding + re-identification ─────────────────────────────────────────
     if faces:
+        
         embed_result = embedder.embed_faces(faces, tids)
 
         for tid, emb in embed_result:
+            # print(f"[DEBUG EMB] norm: {emb.norm().item():.3f}")
             q_report = quality_reports.get(tid)
             if q_report is None:
                 continue
@@ -373,20 +380,35 @@ def process_frame(
 
             emb_buf  = buf.get_all()
             pooled   = pool_embeddings(emb_buf, device=device)
-            refined, energy_before, energy, delta = refine_identity(pooled, hop)
-
+            # refined, energy_before, energy, delta = refine_identity(pooled, hop)
+            refined=pooled
+            energy_before=1
+            energy=1
+            delta=1
             # Feed Hopfield energy and embedding drift to sampler.
             sampler.update_energy(tid, float(energy), float(delta))
             sampler.update_embedding(tid, refined)
 
-            name, score = identify_person(
-                refined=refined,
+            # print("\n[DEBUG INPUT TO IDENTIFY]")
+            # print(f"Track ID: {tid}")
+            # print(f"Quality: {q_report['quality']:.2f}")
+            # print(f"Temporal: {temp['temporal_score']:.2f}")
+            # print(f"Delta: {delta:.3f}")
+            # if source == "video":
+
+            name, score = identify_person_cosine(
+                embedding=refined,
                 gallery=gallery,
-                id_names=id_names,
-                delta=float(delta),
-                threshold=0.7,
-                delta_threshold=0.2,
-            )
+                id_names=id_names
+               )
+            # else:
+            #     name, score = identify_person(
+            #         embedding=refined,
+            #         gallery=gallery,
+            #         id_names=id_names,
+            #         hop=hop,
+            #         device=device,
+            #     )
 
             # ── Trust / abstain logic ────────────────────────────────────────
             trust_low = (
@@ -456,6 +478,12 @@ def process_frame(
             identity_voters[lost_tid].reset()
             del identity_voters[lost_tid]
 
+
+    # print("\n[DEBUG FINAL]")
+    # print(f"Raw name: {name}")
+    # print(f"Stable name: {stable_name}")
+    # print(f"Confidence: {stable_conf:.3f}")
+    # print(f"Warning: {warning}")
     # ── Visualisation ─────────────────────────────────────────────────────────
     # Overlay sampler state: trigger reason + system confidence mode.
     # mode        = FrameSampler.confidence_mode(sampler.last_S)
@@ -473,7 +501,80 @@ def process_frame(
     cv2.imshow("Skynetra Tracking", frame)
     if cv2.waitKey(1) & 0xFF == 27:
         return False
+    
+    #New code to prepare API response with track info and latest frame
+    import base64
 
+    face_images = {}
+
+    for t in active_tracks:
+        tid = t.track_id
+        x1, y1, x2, y2 = map(int, t.tlbr)
+
+        face_crop = frame[y1:y2, x1:x2]
+
+        if face_crop is None or face_crop.size == 0:
+            continue
+
+        _, buffer = cv2.imencode('.jpg', face_crop)
+        face_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        face_images[tid] = face_base64
+        
+       
+    tracks_output = []
+
+    for tid, info in track_info.items():
+
+        # 🔹 Step 1: compute condition
+        needs_confirmation = (
+            info.get("id_conf", 0) < 0.6 or
+            info.get("temporal_score", 0) < 0.6
+        )
+
+        # 🔹 Step 2: decide whether to send face
+        send_face = False
+
+        if needs_confirmation:
+            if tid not in sent_faces:
+                send_face = True
+                sent_faces[tid] = True
+
+        # 🔹 Step 3: get face
+        face = face_images.get(tid) if send_face else None
+
+        # 🔹 Step 4: build dict
+        tracks_output.append({
+            "id": tid,
+            "name": info.get("name"),
+
+            "confidence": round(
+                info.get("id_conf", 0) *
+                info.get("quality", 0) *
+                info.get("temporal_score", 0),
+                2
+            ),
+
+            "raw_conf": round(info.get("id_conf", 0), 2),
+            "quality": round(info.get("quality", 0), 2),
+            "temporal": round(info.get("temporal_score", 0), 2),
+
+            "trust": (
+                "HIGH" if info.get("id_conf", 0) > 0.8 and info.get("quality", 0) > 0.8
+                else "MEDIUM" if info.get("id_conf", 0) > 0.6
+                else "LOW"
+            ),
+
+            "needs_confirmation": needs_confirmation,
+            "face": face
+        })
+
+    # 🔥 final assignment
+    latest_state["tracks"] = tracks_output
+    latest_state["frame"] = latest_state.get("frame", 0) + 1
+
+    latest_frame["frame"] = frame.copy()
+    # print("Frame updated")
     return True
 
 

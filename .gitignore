@@ -6,6 +6,7 @@ skynetra-env/
 *.trt
 *.engine
 *.pth
+*.mp4
 runs/
 data/
 test.py

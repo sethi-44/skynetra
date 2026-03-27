@@ -150,8 +150,8 @@ def identify_person(
     gallery: torch.Tensor,
     id_names: list,
     delta: float,
-    threshold: float       = 0.70,   # bug fix: was 0.95 — unreachably strict
-    delta_threshold: float = 0.20,   # bug fix: was 0.80 — unreachably strict
+    threshold: float       = 0.82,   # bug fix: was 0.95 — unreachably strict
+    delta_threshold: float = 0.30,   # bug fix: was 0.80 — unreachably strict
 ) -> tuple:
     """
     Match a refined embedding against the identity gallery using cosine
@@ -204,10 +204,20 @@ def identify_person(
 
     # [G] cosine similarities (gallery rows are unit-norm, refined is unit-norm)
     scores               = gallery_f32 @ refined_f32
-    best_score, best_idx = torch.max(scores, dim=0)
+    top2_scores, top2_indices = torch.topk(scores, k=2)
 
-    best_score = float(best_score)
-    best_idx   = int(best_idx)
+    best_score = float(top2_scores[0])
+    second_score = float(top2_scores[1])
+    best_idx = int(top2_indices[0])
+
+    print("\n[DEBUG IDENTIFY]")
+    print(f"Scores (top2): {top2_scores.tolist()}")
+    print(f"Best: {best_score:.3f}, Second: {second_score:.3f}")
+    print(f"Delta: {delta:.3f}")
+
+    # Margin check
+    if (best_score - second_score) < 0.15:  # bug fix: was 0.05 — too small, caused many false positives
+        return "Unknown", best_score
 
     # Guard: best_idx must be a valid index (paranoia check)
     if best_idx >= len(id_names):
@@ -215,5 +225,72 @@ def identify_person(
 
     if best_score < threshold:
         return "Unknown", best_score
+    
+    print(f"Decision: {id_names[best_idx] if best_score >= threshold else 'Unknown'}")
 
+    return id_names[best_idx], best_score
+
+
+def identify_person_cosine(
+    embedding: torch.Tensor,
+    gallery: torch.Tensor,
+    id_names: list,
+    threshold: float = 0.80,
+    margin: float = 0.15,
+) -> tuple:
+    """
+    Identify a person using pure cosine similarity (no Hopfield).
+
+    Parameters
+    ----------
+    embedding : [D] tensor (face embedding)
+    gallery   : [G, D] tensor (stored identity embeddings)
+    id_names  : list of G identity names
+    threshold : minimum cosine similarity to accept match
+    margin    : minimum gap between best and second-best
+
+    Returns
+    -------
+    (name, score)
+    """
+
+    # 🚫 No gallery
+    if gallery.numel() == 0 or len(id_names) == 0:
+        return "Unknown", 0.0
+
+    # ✅ Normalize (VERY IMPORTANT)
+    embedding = F.normalize(embedding.float(), dim=-1)
+    gallery = F.normalize(gallery.float(), dim=1)
+
+    # 🔥 Cosine similarity
+    scores = gallery @ embedding   # [G]
+
+    # 🥇 Top-2 scores
+    if scores.shape[0] >= 2:
+        top2_scores, top2_indices = torch.topk(scores, k=2)
+        best_score = float(top2_scores[0])
+        second_score = float(top2_scores[1])
+        best_idx = int(top2_indices[0])
+    else:
+        best_score = float(scores[0])
+        second_score = 0.0
+        best_idx = 0
+
+    # 🔍 DEBUG (keep this while testing)
+    # print("\n[DEBUG COSINE]")
+    # print(f"Scores: {scores.tolist()}")
+    # print(f"Best: {best_score:.3f}, Second: {second_score:.3f}")
+
+    # 🚫 Margin check (avoid confusion)
+    if (best_score - second_score) < margin:
+        print("→ REJECTED (low margin)")
+        return "Unknown", best_score
+
+    # 🚫 Threshold check
+    if best_score < threshold:
+        print("→ REJECTED (low score)")
+        return "Unknown", best_score
+
+    # ✅ Accept
+    print(f"→ ACCEPTED: {id_names[best_idx]}")
     return id_names[best_idx], best_score
